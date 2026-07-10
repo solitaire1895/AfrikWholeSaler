@@ -1,0 +1,808 @@
+AfrikWholesaler
+Production-Ready Build Plan
+Single-Company B2B Sourcing & Wholesale Platform
+Step-by-step delivery roadmap, feature prioritization (MoSCoW),
+and suggested product innovations
+
+Prepared as an execution blueprint derived from the AfrikWholesaler
+Master Prompt (Single-Supplier Model)
+
+1. Executive Summary
+AfrikWholesaler is repositioned from a multi-vendor marketplace into a single-company B2B sourcing and
+wholesale platform. AfrikWholesaler is the only seller of record: it sources from Chinese manufacturers, negotiates
+pricing, performs quality control, manages logistics, and delivers to customers across Africa. Factories are never
+exposed to customers, and every supplier-facing feature (registration, dashboards, ratings, messaging, verification) is
+removed from scope entirely.
+This plan translates that business model into a build sequence: what to build first, what can wait, and where a small
+number of well-chosen innovations would meaningfully improve conversion, trust, and operational efficiency without
+expanding scope. Ratings follow a MoSCoW-style scale: Must-Have (blocks launch), Should-Have (launch is fine
+without it, but weak without it for long), and Good-to-Have (genuine improvement, safe to defer).
+
+2. Business Model at a Glance
+Role
+
+Function
+
+AfrikWholesaler
+
+Sole seller of record: sourcing, negotiation, QC, logistics, customer procurement partner
+
+Chinese Manufacturers
+
+Invisible backend production partners; never contacted by customers
+
+Customers
+
+Purchase exclusively from AfrikWholesaler's catalog, request quotes, track shipments
+
+Internal Staff
+
+Sales, Support, Warehouse, Logistics, Operations, Admin, Super Admin
+
+Removed entirely (do not build): supplier accounts, registration, dashboards, profiles, ratings, comparison tools,
+messaging, verification pages, analytics, onboarding, and subscriptions.
+
+3. User Roles & Permissions
+Role
+
+Core Access
+
+Priority
+
+Guest
+
+Browse catalog, view pricing tiers, submit quote request
+
+Must-Have
+
+Customer
+
+Orders, invoices, payments, shipment tracking, chat, documents
+
+Must-Have
+
+Sales Representative
+
+Handle quotes, chat handoffs, assigned customers
+
+Must-Have
+
+Customer Support Agent
+
+Tickets, live chat, order status lookup
+
+Must-Have
+
+Warehouse Staff
+
+Inventory counts, packaging, stock status updates
+
+Should-Have
+
+Logistics Staff
+
+Shipment creation, carrier updates, customs docs
+
+Should-Have
+
+Operations Manager
+
+Cross-department oversight, reporting
+
+Should-Have
+
+Administrator
+
+Full CMS, product, order, and user management
+
+Must-Have
+
+Super Administrator
+
+Roles & permissions, system configuration, audit logs
+
+Must-Have
+
+Recommendation: implement Role-Based Access Control (RBAC) with a permissions matrix table (role_id, resource, action) rather
+than hardcoded role checks — this lets Super Admins adjust permissions later without a redeploy.
+
+4. Recommended Technical Architecture
+Layer
+
+Recommendation
+
+Frontend (Customer)
+
+Next.js (App Router), server components for catalog/SEO pages, React Query for client
+state
+
+Frontend (Internal Admin)
+
+Separate Next.js app or route group behind auth wall — do not ship admin bundle to
+public site
+
+Backend API
+
+Node.js + TypeScript, REST or tRPC for internal use, versioned public API
+
+Database
+
+PostgreSQL with Row-Level Security scoped by customer_id and staff role
+
+Auth
+
+Supabase Auth or Auth.js; short-lived JWT + refresh, MFA for staff/admin roles
+
+Real-time Chat
+
+Socket.IO server (or Supabase Realtime) with Redis adapter for horizontal scaling
+
+File/Media Storage
+
+Supabase Storage or S3-compatible bucket; signed URLs for documents/invoices
+
+AI Layer
+
+LLM-backed sourcing assistant + chat triage, called via a dedicated internal service (not
+client-side)
+
+Search
+
+Postgres full-text search at MVP; Meilisearch/Typesense if catalog exceeds ~5k SKUs
+
+Payments
+
+Stripe/Flutterwave/Paystack depending on target African markets; escrow-style
+milestone payments for large B2B orders
+
+Notifications
+
+Queue-based (BullMQ/Redis) for email, push, and SMS fan-out
+
+Hosting
+
+Vercel/Render for app tier, managed Postgres (Supabase/RDS), CDN for product media
+
+4.1 Core Data Model (high level)
+●
+
+products — images, videos, description, specs, MOQ, colors, sizes, packaging, origin country, price_tiers
+(JSON), stock_status, badges
+
+●
+
+customers — profile, addresses, documents, verification_status
+
+●
+
+orders / order_items — linked to invoices and payments
+
+●
+
+quote_requests — product_ref (nullable), quantity, target_price, destination_country, attachments, status
+
+●
+
+shipments — carrier, tracking_number, milestones, customs docs
+
+●
+
+conversations / messages — chat threads, internal_notes flag, assigned_agent_id, tags, priority
+
+●
+
+staff / roles / permissions — RBAC join tables
+
+Note: keep internal_notes on a message strictly filtered server-side by role — never rely on frontend hiding alone.
+
+5. Feature Prioritization by Module (MoSCoW)
+Every module from the brief, broken into buildable features and rated for the initial production launch.
+
+5.1 Product Catalog
+Feature
+
+Notes
+
+Priority
+
+Product CRUD (images, description, specs, MOQ)
+
+Core catalog — nothing sells without it
+
+MUST-HAVE
+
+Price tiers by quantity
+
+Required for B2B bulk pricing logic
+
+MUST-HAVE
+
+Stock status & badges (Featured/New/Best Seller)
+
+Merchandising signal, cheap to build
+
+MUST-HAVE
+
+Shipping & import tax estimate per product
+
+Core trust feature for cross-border buyers
+
+MUST-HAVE
+
+Videos on product page
+
+Improves conversion, not launch-blocking
+
+SHOULD-HAVE
+
+Bulk CSV/Excel product import for admins
+
+Speeds up catalog population
+
+SHOULD-HAVE
+
+AI-generated product descriptions from spec sheets
+
+Innovation — see Section 7
+
+GOOD-TO-HAV
+E
+
+Feature
+
+Notes
+
+Priority
+
+Orders, Invoices, Payments
+
+Core commerce loop
+
+MUST-HAVE
+
+Shipment tracking
+
+Directly tied to trust in cross-border delivery
+
+MUST-HAVE
+
+Support & Notifications
+
+Needed for service resolution
+
+MUST-HAVE
+
+Profile, Addresses, Documents
+
+Required for KYC/customs paperwork
+
+MUST-HAVE
+
+Wishlist / Saved products
+
+Retention feature, not launch-critical
+
+SHOULD-HAVE
+
+Messages (chat)
+
+See Live Chat module (5.4)
+
+MUST-HAVE
+
+Document e-signing for POs/contracts
+
+Innovation — see Section 7
+
+GOOD-TO-HAV
+E
+
+Feature
+
+Notes
+
+Priority
+
+Product, Order, Customer Management
+
+Operational backbone
+
+MUST-HAVE
+
+Inventory & Warehouses
+
+Needed once stock is tracked physically
+
+MUST-HAVE
+
+Purchase Requests (internal sourcing from
+factories)
+
+Bridges customer quotes to real procurement
+
+MUST-HAVE
+
+Shipping, Invoices, Payments (internal side)
+
+Mirrors customer-facing records
+
+MUST-HAVE
+
+Support Tickets & Live Chat (staff side)
+
+Required for the chat system to function
+
+MUST-HAVE
+
+Roles & Permissions, Employee Management
+
+Required before more than 1–2 staff use the
+system
+
+MUST-HAVE
+
+5.2 Customer Dashboard
+
+5.3 Internal Admin Dashboard
+
+Analytics & Reports
+
+Useful from week one but can start basic
+
+SHOULD-HAVE
+
+Discounts & Marketing tools
+
+Growth-stage feature
+
+SHOULD-HAVE
+
+Content Management (landing page, articles)
+
+Needed for launch marketing pages
+
+SHOULD-HAVE
+
+AI Insights (demand forecasting, churn signals)
+
+Genuine value-add, needs order history first
+
+GOOD-TO-HAV
+E
+
+5.4 Live Chat System
+Feature
+
+Notes
+
+Priority
+
+Real-time messaging (Socket.IO/WebSockets)
+
+Core of the module
+
+MUST-HAVE
+
+Human agent assignment & handoff
+
+Required so requests don't get lost
+
+MUST-HAVE
+
+Image/file upload in chat
+
+Common B2B need (spec sheets, photos)
+
+MUST-HAVE
+
+Typing indicators, read receipts, online status
+
+Expected UX parity with modern chat apps
+
+SHOULD-HAVE
+
+Internal staff notes (hidden from customer)
+
+High operational value, moderate build cost
+
+MUST-HAVE
+
+Conversation tags & priority levels
+
+Helps triage at scale
+
+SHOULD-HAVE
+
+AI chatbot first line of response
+
+See AI Sourcing Assistant, Section 5.5
+
+MUST-HAVE
+
+Voice messages & video attachments
+
+Nice-to-have channel richness
+
+GOOD-TO-HAV
+E
+
+CSAT rating after conversation
+
+Good feedback loop, simple to add
+
+SHOULD-HAVE
+
+Push + email notification fan-out
+
+Needed so agents/customers don't miss
+replies
+
+MUST-HAVE
+
+5.5 Request a Quote & AI Sourcing Assistant
+Feature
+
+Notes
+
+Priority
+
+Quote request form (product, qty, target price,
+destination)
+
+Primary lead-gen mechanism for B2B
+
+MUST-HAVE
+
+Staff quote response workflow
+
+Closes the loop on every request
+
+MUST-HAVE
+
+AI assistant: catalog recommendation from natural
+language
+
+Core differentiator of the platform
+
+MUST-HAVE
+
+AI assistant: shipping/customs cost estimate
+
+High trust value for first-time buyers
+
+SHOULD-HAVE
+
+AI assistant: escalate to sales rep
+
+Prevents AI from blocking real sales
+
+MUST-HAVE
+
+AI assistant: proactive reorder suggestions
+
+Innovation — see Section 7
+
+GOOD-TO-HAV
+E
+
+Feature
+
+Notes
+
+Priority
+
+"Sold by AfrikWholesaler" trust block
+
+Replaces supplier info; core to the new model
+
+MUST-HAVE
+
+Request a Quote / Chat with an Expert / Ask About
+This Product
+
+Primary conversion actions
+
+MUST-HAVE
+
+Shipping Calculator & Import Cost Calculator
+
+Removes biggest buyer uncertainty
+
+MUST-HAVE
+
+Delivery estimate
+
+Sets expectations, low build cost
+
+MUST-HAVE
+
+Bulk pricing table
+
+Core to B2B pricing transparency
+
+MUST-HAVE
+
+5.6 Product Page
+
+Product reviews
+
+Builds trust over time
+
+SHOULD-HAVE
+
+FAQ per product
+
+Reduces repeat support questions
+
+SHOULD-HAVE
+
+Feature
+
+Notes
+
+Priority
+
+Hero, Search, Categories, Featured Products
+
+Standard entry point
+
+MUST-HAVE
+
+Why Choose AfrikWholesaler, Our Sourcing
+Process, How It Works
+
+Explains the single-company trust model
+
+MUST-HAVE
+
+Quality Inspection, Shipping & Logistics sections
+
+Reinforces credibility claims
+
+SHOULD-HAVE
+
+Testimonials, FAQ, Business Statistics
+
+Social proof — strong but not launch-blocking
+
+SHOULD-HAVE
+
+Request a Quote / Chat With an Expert CTAs
+
+High-intent conversion points
+
+MUST-HAVE
+
+Latest Articles / Newsletter
+
+Content marketing, post-launch
+
+GOOD-TO-HAV
+E
+
+5.7 Landing Page
+
+6. Step-by-Step Development Roadmap
+Phase 0 — Foundations (Week 1)
+● Finalize data model (products, customers, orders, quotes, shipments, chat, RBAC)
+● Set up PostgreSQL with Row-Level Security policies per role/customer
+● Provision Supabase project, storage buckets, and auth
+● Set up Next.js monorepo: public app + internal admin route group
+● CI/CD pipeline, staging environment, error monitoring (Sentry)
+
+Phase 1 — Core Commerce (Weeks 2–3)
+● Product catalog CRUD + price tiers + badges (admin side)
+● Public catalog browsing, product detail page, search/filter
+● Customer registration/login, profile, addresses, documents
+● Orders, invoices, and payment integration (Stripe/Paystack/Flutterwave)
+● Shipping & import cost calculators on product pages
+
+Phase 2 — Sourcing & Communication (Weeks 4–5)
+● Request a Quote flow (customer form → internal quote queue → staff response)
+● Live chat backbone: Socket.IO server, conversation model, agent assignment
+● Internal staff notes, tags, priority levels on conversations
+● File/image upload in chat and quote attachments
+● Notification pipeline: email + push for chat and order events
+
+Phase 3 — AI Layer (Week 6)
+● AI sourcing assistant: intent parsing → catalog recommendation
+● AI-assisted shipping/customs estimate generation
+● AI chatbot as first responder in live chat with human handoff rules
+● Guardrails: AI never quotes final binding price without staff confirmation
+
+Phase 4 — Operations & Logistics (Week 7)
+● Warehouse & inventory management screens
+● Internal Purchase Requests module (bridges customer demand to real factory sourcing)
+● Logistics/shipment tracking, carrier status updates, customs documents
+● Operations Manager reporting views
+
+Phase 5 — Admin, Roles & Content (Week 8)
+● Roles & Permissions matrix UI for Super Admin
+
+● Employee management (invite, deactivate, role assignment)
+● Content management for landing page sections and articles
+● Discounts & basic marketing tools
+
+Phase 6 — Hardening & Launch Readiness (Weeks 9–10)
+● Security review: RLS policy audit, auth flow pen-test, rate limiting
+● Load test chat and checkout flows
+● Accessibility and mobile QA across customer and admin apps
+● Backup/restore drill, incident runbook, on-call rotation
+● Soft launch with a limited customer cohort before full rollout
+
+7. Suggested Innovations
+Optional additions layered on top of the core brief — each rated for how much value it adds relative to its build cost.
+
+7.1 Should-Have Innovations
+Feature
+
+Notes
+
+Priority
+
+Landed-cost transparency badge
+
+Shows all-in price (product + shipping + duty)
+up front on every listing to reduce cart
+abandonment
+
+SHOULD-HAVE
+
+Order milestone timeline (Sourced → QC →
+Shipped → Customs → Delivered)
+
+Turns a black-box process into a visible
+pipeline customers can trust
+
+SHOULD-HAVE
+
+WhatsApp Business integration for chat
+
+Many African B2B buyers already live in
+WhatsApp; mirror conversations there
+
+SHOULD-HAVE
+
+Multi-currency & multi-language
+(French/English/Portuguese) support
+
+Matches real market spread across
+Francophone/Anglophone/Lusophone Africa
+
+SHOULD-HAVE
+
+Feature
+
+Notes
+
+Priority
+
+AI reorder prediction
+
+Suggests restock quotes based on customer's
+historical order cadence
+
+GOOD-TO-HAV
+E
+
+Group buying / MOQ pooling
+
+Lets several smaller buyers combine orders to
+hit a factory's MOQ and unlock better tier
+pricing
+
+GOOD-TO-HAV
+E
+
+Digital contract & e-signature for large POs
+
+Speeds up approval cycles for high-value B2B
+orders
+
+GOOD-TO-HAV
+E
+
+Photo-based quote requests (AI product matching
+from a photo)
+
+Lets a customer snap a photo of a product
+they want sourced instead of typing a
+description
+
+GOOD-TO-HAV
+E
+
+Trade-credit / net-30 terms for verified repeat
+customers
+
+Common B2B expectation once trust is
+established; needs a credit-risk module first
+
+GOOD-TO-HAV
+E
+
+Sustainability/compliance scorecard per product
+
+Differentiator for buyers who need ESG
+documentation for their own customers
+
+GOOD-TO-HAV
+E
+
+7.2 Good-to-Have Innovations
+
+8. Risk & Compliance Notes
+●
+
+Customs/tax estimates are estimates only — display clear disclaimers; actual duties vary by destination
+country and are confirmed at the quote stage by staff, not automatically bound by the AI assistant.
+
+●
+
+AI assistant scope limits — the AI should recommend and estimate, but final binding price and delivery
+commitments must be confirmed by a human sales representative.
+
+●
+
+Document handling — customer documents (IDs, business registration, customs paperwork) should be stored
+in access-controlled buckets with signed URLs, not public storage.
+
+●
+
+Internal staff notes — must be filtered server-side by role; never trust a frontend flag alone to hide sensitive
+internal commentary from customers.
+
+●
+
+Payment flows — for high-value B2B orders, consider milestone-based payment release (deposit → balance on
+shipment) rather than single full-payment capture.
+
+9. Production Readiness Checklist
+●
+
+All Must-Have features from Section 5 are implemented and tested end-to-end
+
+●
+
+RLS policies verified for every table containing customer or financial data
+
+●
+
+RBAC matrix covers every internal role listed in Section 3
+
+●
+
+Live chat load-tested with concurrent conversations and file uploads
+
+●
+
+AI assistant guardrails confirmed: no binding prices/commitments without staff sign-off
+
+●
+
+Payment provider(s) tested in sandbox and production mode for target African markets
+
+●
+
+Shipment tracking integrated with at least one logistics/carrier data source
+
+●
+
+Backup, restore, and disaster-recovery runbook tested at least once
+
+●
+
+Legal review of Terms of Service, Privacy Policy, and cross-border trade disclaimers
+
+●
+
+Monitoring & alerting in place for API errors, payment failures, and chat downtime
+
+●
+
+Soft launch completed with a limited customer cohort and feedback incorporated
+
+End of plan. This document is intended as a working blueprint — refine timelines and scope after the first architecture review with
+the engineering team.
+
+

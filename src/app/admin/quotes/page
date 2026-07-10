@@ -1,0 +1,70 @@
+import { FileText, Clock, CheckCircle, XCircle, MapPin, Package, ArrowRight } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { quoteRequests } from "@/lib/data";
+import { formatPrice, cn } from "@/lib/utils";
+import type { QuoteStatus } from "@/types";
+
+const statusConfig: Record<QuoteStatus, { color: string; icon: typeof Clock }> = {
+  Submitted: { color: "bg-info/10 text-info border-info/20", icon: Clock },
+  "Under Review": { color: "bg-warning/10 text-warning border-warning/20", icon: Clock },
+  Quoted: { color: "bg-brand/10 text-brand border-brand/20", icon: FileText },
+  Accepted: { color: "bg-success/10 text-success border-success/20", icon: CheckCircle },
+  Rejected: { color: "bg-error/10 text-error border-error/20", icon: XCircle },
+  Expired: { color: "bg-surface-secondary text-text-disabled border-border", icon: XCircle },
+};
+
+export default function AdminQuotesPage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-navy tracking-tight">Quote Queue</h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          Review and respond to customer quote requests.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {quoteRequests.map((quote) => {
+          const config = statusConfig[quote.status];
+          const StatusIcon = config.icon;
+          return (
+            <Card key={quote.id} hover className="p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-surface-secondary">
+                  <Package className="h-6 w-6 text-text-secondary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <h3 className="text-sm font-semibold text-text-primary">{quote.productName}</h3>
+                    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold", config.color)}>
+                      <StatusIcon className="h-3 w-3" />
+                      {quote.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-text-secondary flex-wrap">
+                    <span>Qty: <span className="font-medium text-text-primary">{quote.quantity.toLocaleString()}</span></span>
+                    {quote.targetPrice > 0 && <span>Target: <span className="font-medium text-text-primary">{formatPrice(quote.targetPrice)}/unit</span></span>}
+                    <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{quote.destinationCountry}</span>
+                    <span>{new Date(quote.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  {(quote.status === "Submitted" || quote.status === "Under Review") && (
+                    <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-hover transition-colors">
+                      <FileText className="h-3.5 w-3.5" />
+                      Send Quote
+                    </button>
+                  )}
+                  <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
+                    Details
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
