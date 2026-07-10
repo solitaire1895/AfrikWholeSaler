@@ -8,15 +8,16 @@ import {
   Sparkles,
   Search,
   Tag,
-  Clock,
   Bot,
   User,
   Headphones,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { conversations, messages as initialMessages } from "@/lib/data";
 import { cn } from "@/lib/utils";
-import type { Message } from "@/types";
+import { fetchMyConversations, fetchMessages, mapMessageRow } from "@/lib/client-queries";
+import { sendMessage, markMessagesRead } from "@/app/actions/crud";
+import { subscribeToMessages } from "@/lib/realtime";
+import type { Message, Conversation } from "@/types";
 
 const priorityColors: Record<string, string> = {
   Low: "bg-surface-secondary text-text-secondary",
@@ -26,17 +27,10 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function MessagesPage() {
-  const [selectedConvId, setSelectedConvId] = useState(conversations[0]?.id || "");
-  const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>(
-    () => {
-      const grouped: Record<string, Message[]> = {};
-      for (const msg of initialMessages) {
-        if (!grouped[msg.conversationId]) grouped[msg.conversationId] = [];
-        grouped[msg.conversationId].push(msg);
-      }
-      return grouped;
-    }
-  );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConvId, setSelectedConvId] = useState("");
+  const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>({});
+  const [sending, setSending] = useState(false);
   const [input, setInput] = useState("");
   const [search, setSearch] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,25 +42,45 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [selectedMessages]);
 
-  const handleSend = () => {
-    if (!input.trim() || !selectedConvId) return;
-
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      conversationId: selectedConvId,
-      senderId: "cust-1",
-      senderRole: "customer",
-      content: input.trim(),
-      attachments: [],
-      isInternalNote: false,
-      createdAt: new Date().toISOString(),
-    };
-
-    setChatMessages({
-      ...chatMessages,
-      [selectedConvId]: [...selectedMessages, newMessage],
+  useEffect(() => {
+    fetchMyConversations().then((convs) => {
+      setConversations(convs);
+      if (convs[0]) setSelectedConvId(convs[0].id);
     });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedConvId) return;
+    let active = true;
+
+    fetchMessages(selectedConvId).then((msgs) => {
+      if (active) setChatMessages((prev) => ({ ...prev, [selectedConvId]: msgs }));
+    });
+    markMessagesRead(selectedConvId);
+
+    const unsubscribe = subscribeToMessages(selectedConvId, (row) => {
+      const msg = mapMessageRow(row as Parameters<typeof mapMessageRow>[0]);
+      setChatMessages((prev) => {
+        const existing = prev[selectedConvId] || [];
+        if (existing.some((m) => m.id === msg.id)) return prev;
+        return { ...prev, [selectedConvId]: [...existing, msg] };
+      });
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [selectedConvId]);
+
+  const handleSend = async () => {
+    if (!input.trim() || !selectedConvId || sending) return;
+    const content = input.trim();
     setInput("");
+    setSending(true);
+    const result = await sendMessage({ conversationId: selectedConvId, content });
+    setSending(false);
+    if (!result.success) setInput(content);
   };
 
   const filteredConversations = conversations.filter((c) => {
@@ -346,7 +360,7 @@ export default function MessagesPage() {
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || sending}
                   className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] bg-brand text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   <Send className="h-5 w-5" />

@@ -1,7 +1,11 @@
-import { MessageCircle, Tag, Clock, Headphones, Bot, User } from "lucide-react";
+"use client";
+
+import { useState, useEffect } from "react";
+import { MessageCircle, Tag, Headphones, Bot, User } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { conversations, messages } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { fetchAllConversations, fetchRecentMessages } from "@/lib/client-queries";
+import type { Conversation, Message } from "@/types";
 
 const priorityColors: Record<string, string> = {
   Low: "bg-surface-secondary text-text-secondary",
@@ -11,6 +15,14 @@ const priorityColors: Record<string, string> = {
 };
 
 export default function AdminMessagesPage() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    fetchAllConversations().then(setConversations);
+    fetchRecentMessages(8).then(setMessages);
+  }, []);
+
   return (
     <div className="space-y-6">
       <div>
@@ -24,8 +36,6 @@ export default function AdminMessagesPage() {
         {/* Conversation List */}
         <div className="lg:col-span-1 space-y-3">
           {conversations.map((conv) => {
-            const convMessages = messages.filter((m) => m.conversationId === conv.id);
-            const lastMsg = convMessages[convMessages.length - 1];
             return (
               <Card key={conv.id} hover className="p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -41,9 +51,6 @@ export default function AdminMessagesPage() {
                     </span>
                   )}
                 </div>
-                {lastMsg && (
-                  <p className="text-xs text-text-secondary truncate mb-2">{lastMsg.content}</p>
-                )}
                 <div className="flex items-center gap-2">
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", priorityColors[conv.priority])}>
                     {conv.priority}
@@ -70,7 +77,7 @@ export default function AdminMessagesPage() {
               <h3 className="text-sm font-semibold text-navy">Recent Messages</h3>
             </div>
             <div className="space-y-4">
-              {messages.slice(0, 8).map((msg) => {
+              {messages.map((msg) => {
                 const isCustomer = msg.senderRole === "customer";
                 const isAI = msg.senderRole === "ai";
                 return (
