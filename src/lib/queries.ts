@@ -485,14 +485,45 @@ export async function getCurrentCustomer(): Promise<Customer | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
+  // Try to fetch existing customer record
   const { data, error } = await supabase
     .from("customers")
     .select("*")
     .eq("user_id", user.id)
     .single();
 
-  if (error || !data) return null;
-  return mapCustomer(data as CustomerRow);
+  if (data) return mapCustomer(data as CustomerRow);
+
+  // No customer row found — auto-create one from profile data
+  // This prevents redirect loops for users who have a profile but no customer record
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return null;
+
+  const contactName = [profile.first_name, profile.last_name]
+    .filter(Boolean)
+    .join(" ") || user.email || "Unknown User";
+  const companyName = profile.company || "Individual Buyer";
+
+  const { data: newCustomer, error: insertError } = await supabase
+    .from("customers")
+    .insert({
+      user_id: user.id,
+      company_name: companyName,
+      contact_name: contactName,
+      email: profile.email || user.email,
+      phone: profile.phone || null,
+      country: profile.country || "Unknown",
+    })
+    .select("*")
+    .single();
+
+  if (insertError || !newCustomer) return null;
+  return mapCustomer(newCustomer as CustomerRow);
 }
 
 export async function getCustomerById(id: string): Promise<Customer | null> {

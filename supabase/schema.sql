@@ -94,6 +94,39 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- Auto-create customer record on profile creation
+-- This ensures every user has a customers row for the dashboard
+CREATE OR REPLACE FUNCTION public.handle_new_customer()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  -- Only create customer if one doesn't already exist for this user
+  IF NOT EXISTS (SELECT 1 FROM public.customers WHERE user_id = NEW.id) THEN
+    INSERT INTO public.customers (user_id, company_name, contact_name, email, phone, country)
+    VALUES (
+      NEW.id,
+      COALESCE(NEW.company, 'Individual Buyer'),
+      COALESCE(
+        NULLIF(TRIM(NEW.first_name || ' ' || NEW.last_name), ''),
+        NEW.email,
+        'Unknown User'
+      ),
+      NEW.email,
+      NEW.phone,
+      COALESCE(NEW.country, 'Unknown')
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_profile_created ON profiles;
+CREATE TRIGGER on_profile_created
+  AFTER INSERT ON profiles
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_customer();
+
 -- ----------------------------------------------------------------------------
 -- 4. Categories
 -- ----------------------------------------------------------------------------

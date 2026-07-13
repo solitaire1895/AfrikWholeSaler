@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
-import { quoteRequests } from "@/lib/data";
+import { getCurrentCustomer, getQuotesByCustomer } from "@/lib/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import type { QuoteStatus } from "@/types";
 
@@ -40,7 +40,12 @@ const statusConfig: Record<
   },
 };
 
-export default function QuotesPage() {
+export default async function QuotesPage() {
+  const customer = await getCurrentCustomer();
+  if (!customer) return null;
+
+  const quoteRequests = await getQuotesByCustomer(customer.id);
+
   return (
     <div className="space-y-6">
       {/* Header */}

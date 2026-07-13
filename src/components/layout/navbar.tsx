@@ -12,6 +12,7 @@ import {
   User,
   LogOut,
   LayoutDashboard,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaMenuOpen, setMegaMenuOpen] = useState(false);
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -34,14 +36,35 @@ export function Navbar() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
       setUser(user);
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .single();
+        setUserRole(profile?.role ?? null);
+      } else {
+        setUserRole(null);
+      }
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", currentUser.id)
+          .single();
+        setUserRole(profile?.role ?? null);
+      } else {
+        setUserRole(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -51,8 +74,11 @@ export function Navbar() {
     const supabase = createClient();
     await supabase.auth.signOut();
     setUser(null);
+    setUserRole(null);
     window.location.href = "/";
   };
+
+  const isAdmin = userRole === "admin" || userRole === "super_admin";
 
   return (
     <header
@@ -176,6 +202,16 @@ export function Navbar() {
                     <LayoutDashboard className="h-4 w-4" />
                     Dashboard
                   </Link>
+                  {isAdmin && (
+                    <Link
+                      href="/admin"
+                      className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-brand hover:bg-surface-secondary transition-colors"
+                      onClick={() => setUserMenuOpen(false)}
+                    >
+                      <Shield className="h-4 w-4" />
+                      Admin Panel
+                    </Link>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-error hover:bg-surface-secondary transition-colors"
@@ -272,6 +308,17 @@ export function Navbar() {
                     <LayoutDashboard className="h-4 w-4" />
                     Dashboard
                   </ButtonLink>
+                  {isAdmin && (
+                    <ButtonLink
+                      href="/admin"
+                      variant="secondary"
+                      size="md"
+                      className="w-full"
+                    >
+                      <Shield className="h-4 w-4" />
+                      Admin Panel
+                    </ButtonLink>
+                  )}
                   <button
                     onClick={handleLogout}
                     className="flex h-11 items-center justify-center gap-2 rounded-[var(--radius-button)] border border-border bg-surface text-sm font-medium text-text-secondary hover:text-error hover:border-error/20 transition-colors w-full"

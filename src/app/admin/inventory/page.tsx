@@ -1,9 +1,11 @@
 import { PackageCheck, AlertTriangle, TrendingDown, Package } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { products } from "@/lib/data";
+import { getProducts } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-export default function AdminInventoryPage() {
+export default async function AdminInventoryPage() {
+  const products = await getProducts();
+
   const inStock = products.filter((p) => p.stockStatus === "In Stock").length;
   const lowStock = products.filter((p) => p.stockStatus === "Low Stock").length;
   const outOfStock = products.filter((p) => p.stockStatus === "Out of Stock").length;
@@ -50,34 +52,46 @@ export default function AdminInventoryPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {products.map((product) => (
-                <tr key={product.id} className="hover:bg-surface-secondary/30">
-                  <td className="px-4 py-3">
-                    <p className="text-sm font-medium text-text-primary truncate max-w-[200px]">{product.name}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-sm text-text-secondary">{product.category}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                      product.stockStatus === "In Stock" ? "bg-success/10 text-success" :
-                      product.stockStatus === "Low Stock" ? "bg-warning/10 text-warning" :
-                      product.stockStatus === "Out of Stock" ? "bg-error/10 text-error" :
-                      "bg-info/10 text-info"
-                    )}>
-                      {product.stockStatus}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <span className="text-sm text-text-secondary">{product.moq}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button className="inline-flex h-8 items-center rounded-[var(--radius-sm)] border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary">
-                      Update
-                    </button>
+              {products.length > 0 ? (
+                products.map((product) => (
+                  <tr key={product.id} className="hover:bg-surface-secondary/30">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-text-primary truncate max-w-[200px]">{product.name}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-text-secondary">{product.category}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                        product.stockStatus === "In Stock" ? "bg-success/10 text-success" :
+                        product.stockStatus === "Low Stock" ? "bg-warning/10 text-warning" :
+                        product.stockStatus === "Out of Stock" ? "bg-error/10 text-error" :
+                        "bg-info/10 text-info"
+                      )}>
+                        {product.stockStatus}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="text-sm text-text-secondary">{product.moq}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <a
+                        href={`/admin/products`}
+                        className="inline-flex h-8 items-center rounded-[var(--radius-sm)] border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary"
+                      >
+                        Update
+                      </a>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-12 text-center">
+                    <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
+                    <p className="text-sm text-text-secondary">No products in inventory.</p>
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

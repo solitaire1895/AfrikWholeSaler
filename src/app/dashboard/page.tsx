@@ -6,22 +6,20 @@ import {
   FileText,
   MessageCircle,
   TrendingUp,
-  Clock,
   CheckCircle,
   Package,
   ArrowRight,
   DollarSign,
-  AlertCircle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import {
-  orders,
-  shipments,
-  quoteRequests,
-  conversations,
-  currentCustomer,
-} from "@/lib/data";
+  getCurrentCustomer,
+  getOrdersByCustomer,
+  getShipmentsByCustomer,
+  getQuotesByCustomer,
+  getConversationsByCustomer,
+} from "@/lib/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import type { OrderStatus } from "@/types";
 
@@ -36,7 +34,17 @@ const statusColors: Record<OrderStatus, string> = {
   Cancelled: "bg-error/10 text-error border-error/20",
 };
 
-export default function DashboardOverviewPage() {
+export default async function DashboardOverviewPage() {
+  const customer = await getCurrentCustomer();
+  if (!customer) return null;
+
+  const [orders, shipments, quoteRequests, conversations] = await Promise.all([
+    getOrdersByCustomer(customer.id),
+    getShipmentsByCustomer(customer.id),
+    getQuotesByCustomer(customer.id),
+    getConversationsByCustomer(customer.id),
+  ]);
+
   const activeOrders = orders.filter(
     (o) => o.status !== "Delivered" && o.status !== "Cancelled"
   );
@@ -99,7 +107,7 @@ export default function DashboardOverviewPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy tracking-tight">
-            Welcome back, {currentCustomer.firstName}!
+            Welcome back, {customer.firstName}!
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
             Here's an overview of your sourcing activity.
@@ -155,12 +163,12 @@ export default function DashboardOverviewPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-              {currentCustomer.verificationStatus}
+              {customer.verificationStatus}
             </span>
           </div>
           <p className="text-xs text-text-secondary mt-2">
             Member since{" "}
-            {new Date(currentCustomer.createdAt).toLocaleDateString("en-US", {
+            {new Date(customer.createdAt).toLocaleDateString("en-US", {
               year: "numeric",
               month: "long",
             })}
@@ -194,53 +202,68 @@ export default function DashboardOverviewPage() {
           </Link>
         </div>
         <div className="space-y-3">
-          {recentOrders.map((order) => (
-            <Card key={order.id} hover className="p-4">
-              <div className="flex items-center gap-4">
-                <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-secondary">
-                  <Image
-                    src={order.items[0].productImage}
-                    alt={order.items[0].productName}
-                    fill
-                    sizes="56px"
-                    className="object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-text-primary">
-                      {order.orderNumber}
-                    </span>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
-                        statusColors[order.status]
-                      )}
-                    >
-                      {order.status}
-                    </span>
+          {recentOrders.length > 0 ? (
+            recentOrders.map((order) => (
+              <Card key={order.id} hover className="p-4">
+                <div className="flex items-center gap-4">
+                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-secondary">
+                    {order.items[0]?.productImage ? (
+                      <Image
+                        src={order.items[0].productImage}
+                        alt={order.items[0].productName}
+                        fill
+                        sizes="56px"
+                        className="object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <Package className="h-6 w-6 text-text-disabled" />
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm text-text-secondary truncate">
-                    {order.items.length}{" "}
-                    {order.items.length === 1 ? "item" : "items"} ·{" "}
-                    {order.items[0].productName}
-                    {order.items.length > 1 && ` +${order.items.length - 1} more`}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold text-text-primary">
+                        {order.orderNumber}
+                      </span>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold",
+                          statusColors[order.status]
+                        )}
+                      >
+                        {order.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-text-secondary truncate">
+                      {order.items.length}{" "}
+                      {order.items.length === 1 ? "item" : "items"} ·{" "}
+                      {order.items[0]?.productName}
+                      {order.items.length > 1 && ` +${order.items.length - 1} more`}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-bold text-navy">
+                      {formatPrice(order.totalAmount, order.currency)}
+                    </p>
+                    <p className="text-xs text-text-secondary">
+                      {new Date(order.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-navy">
-                    {formatPrice(order.totalAmount, order.currency)}
-                  </p>
-                  <p className="text-xs text-text-secondary">
-                    {new Date(order.createdAt).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </p>
-                </div>
-              </div>
+              </Card>
+            ))
+          ) : (
+            <Card className="p-8 text-center">
+              <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
+              <p className="text-sm text-text-secondary">
+                No orders yet. Start by browsing products or requesting a quote.
+              </p>
             </Card>
-          ))}
+          )}
         </div>
       </div>
 

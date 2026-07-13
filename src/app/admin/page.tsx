@@ -15,12 +15,10 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
-  orders,
-  quoteRequests,
-  products,
-  conversations,
-  shipments,
-} from "@/lib/data";
+  getAdminDashboardStats,
+  getAllOrders,
+  getAllQuotes,
+} from "@/lib/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import type { OrderStatus } from "@/types";
 
@@ -35,58 +33,12 @@ const statusColors: Record<OrderStatus, string> = {
   Cancelled: "bg-error/10 text-error border-error/20",
 };
 
-export default function AdminOverviewPage() {
-  const totalRevenue = orders
-    .filter((o) => o.status !== "Cancelled")
-    .reduce((sum, o) => sum + o.totalAmount, 0);
-  const pendingQuotes = quoteRequests.filter(
-    (q) => q.status === "Submitted" || q.status === "Under Review"
-  );
-  const activeOrders = orders.filter(
-    (o) => o.status !== "Delivered" && o.status !== "Cancelled"
-  );
-  const activeShipments = shipments.filter((s) =>
-    s.milestones.some((m) => !m.completed)
-  );
-  const unreadMessages = conversations.reduce(
-    (sum, c) => sum + c.unreadCount,
-    0
-  );
-
-  const stats = [
-    {
-      label: "Total Revenue",
-      value: formatPrice(totalRevenue),
-      icon: DollarSign,
-      color: "text-success",
-      bg: "bg-success/10",
-      change: "+12.5%",
-    },
-    {
-      label: "Active Orders",
-      value: activeOrders.length.toString(),
-      icon: ShoppingBag,
-      color: "text-brand",
-      bg: "bg-brand-light",
-      change: "+3",
-    },
-    {
-      label: "Pending Quotes",
-      value: pendingQuotes.length.toString(),
-      icon: FileText,
-      color: "text-gold",
-      bg: "bg-gold-light",
-      change: "+2",
-    },
-    {
-      label: "Total Customers",
-      value: "3,547",
-      icon: Users,
-      color: "text-info",
-      bg: "bg-info/10",
-      change: "+89",
-    },
-  ];
+export default async function AdminOverviewPage() {
+  const [stats, orders, quoteRequests] = await Promise.all([
+    getAdminDashboardStats(),
+    getAllOrders(),
+    getAllQuotes(),
+  ]);
 
   const recentOrders = [...orders]
     .sort(
@@ -94,6 +46,39 @@ export default function AdminOverviewPage() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
     .slice(0, 5);
+
+  const recentQuotes = quoteRequests.slice(0, 5);
+
+  const statsCards = [
+    {
+      label: "Total Revenue",
+      value: formatPrice(stats.totalRevenue),
+      icon: DollarSign,
+      color: "text-success",
+      bg: "bg-success/10",
+    },
+    {
+      label: "Active Orders",
+      value: stats.activeOrders.toString(),
+      icon: ShoppingBag,
+      color: "text-brand",
+      bg: "bg-brand-light",
+    },
+    {
+      label: "Pending Quotes",
+      value: stats.pendingQuotes.toString(),
+      icon: FileText,
+      color: "text-gold",
+      bg: "bg-gold-light",
+    },
+    {
+      label: "Total Customers",
+      value: stats.totalCustomers.toLocaleString(),
+      icon: Users,
+      color: "text-info",
+      bg: "bg-info/10",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -109,7 +94,7 @@ export default function AdminOverviewPage() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
+        {statsCards.map((stat) => (
           <Card key={stat.label} className="p-5">
             <div className="flex items-center justify-between mb-3">
               <div
@@ -120,10 +105,6 @@ export default function AdminOverviewPage() {
               >
                 <stat.icon className={cn("h-5 w-5", stat.color)} />
               </div>
-              <span className="text-xs font-medium text-success flex items-center gap-0.5">
-                <TrendingUp className="h-3 w-3" />
-                {stat.change}
-              </span>
             </div>
             <p className="text-2xl font-bold text-navy">{stat.value}</p>
             <p className="text-xs text-text-secondary mt-1">{stat.label}</p>
@@ -140,7 +121,7 @@ export default function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-xl font-bold text-navy">
-                {activeShipments.length}
+                {stats.activeShipments}
               </p>
               <p className="text-xs text-text-secondary">Active Shipments</p>
             </div>
@@ -152,7 +133,7 @@ export default function AdminOverviewPage() {
               <Package className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xl font-bold text-navy">{products.length}</p>
+              <p className="text-xl font-bold text-navy">{stats.totalProducts}</p>
               <p className="text-xs text-text-secondary">Products in Catalog</p>
             </div>
           </div>
@@ -163,8 +144,8 @@ export default function AdminOverviewPage() {
               <MessageCircle className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xl font-bold text-navy">{unreadMessages}</p>
-              <p className="text-xs text-text-secondary">Unread Messages</p>
+              <p className="text-xl font-bold text-navy">{stats.unreadMessages}</p>
+              <p className="text-xs text-text-secondary">Open Conversations</p>
             </div>
           </div>
         </Card>
@@ -174,8 +155,10 @@ export default function AdminOverviewPage() {
               <AlertCircle className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xl font-bold text-navy">2</p>
-              <p className="text-xs text-text-secondary">Alerts</p>
+              <p className="text-xl font-bold text-navy">
+                {stats.pendingQuotes}
+              </p>
+              <p className="text-xs text-text-secondary">Quotes Needing Review</p>
             </div>
           </div>
         </Card>
@@ -197,43 +180,56 @@ export default function AdminOverviewPage() {
           </div>
           <Card className="overflow-hidden">
             <div className="divide-y divide-border">
-              {recentOrders.map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center gap-3 p-4 hover:bg-surface-secondary/30 transition-colors"
-                >
-                  <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-secondary">
-                    <Image
-                      src={order.items[0].productImage}
-                      alt={order.items[0].productName}
-                      fill
-                      sizes="40px"
-                      className="object-cover"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-text-primary">
-                      {order.orderNumber}
-                    </p>
-                    <p className="text-xs text-text-secondary truncate">
-                      {order.items[0].productName}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-navy">
-                      {formatPrice(order.totalAmount, order.currency)}
-                    </p>
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-semibold",
-                        statusColors[order.status]
+              {recentOrders.length > 0 ? (
+                recentOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex items-center gap-3 p-4 hover:bg-surface-secondary/30 transition-colors"
+                  >
+                    <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-secondary">
+                      {order.items[0]?.productImage ? (
+                        <Image
+                          src={order.items[0].productImage}
+                          alt={order.items[0].productName}
+                          fill
+                          sizes="40px"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <Package className="h-5 w-5 text-text-disabled" />
+                        </div>
                       )}
-                    >
-                      {order.status}
-                    </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-text-primary">
+                        {order.orderNumber}
+                      </p>
+                      <p className="text-xs text-text-secondary truncate">
+                        {order.items[0]?.productName || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-navy">
+                        {formatPrice(order.totalAmount, order.currency)}
+                      </p>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-semibold",
+                          statusColors[order.status]
+                        )}
+                      >
+                        {order.status}
+                      </span>
+                    </div>
                   </div>
+                ))
+              ) : (
+                <div className="p-8 text-center">
+                  <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
+                  <p className="text-sm text-text-secondary">No orders yet.</p>
                 </div>
-              ))}
+              )}
             </div>
           </Card>
         </div>
@@ -252,40 +248,47 @@ export default function AdminOverviewPage() {
           </div>
           <Card className="overflow-hidden">
             <div className="divide-y divide-border">
-              {quoteRequests.map((quote) => (
-                <div
-                  key={quote.id}
-                  className="flex items-center gap-3 p-4 hover:bg-surface-secondary/30 transition-colors"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-surface-secondary">
-                    <FileText className="h-5 w-5 text-text-secondary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-text-primary truncate">
-                      {quote.productName}
-                    </p>
-                    <p className="text-xs text-text-secondary">
-                      {quote.quantity.toLocaleString()} units ·{" "}
-                      {quote.destinationCountry}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold shrink-0",
-                      quote.status === "Submitted"
-                        ? "bg-info/10 text-info border-info/20"
-                        : quote.status === "Under Review"
-                          ? "bg-warning/10 text-warning border-warning/20"
-                          : "bg-brand/10 text-brand border-brand/20"
-                    )}
+              {recentQuotes.length > 0 ? (
+                recentQuotes.map((quote) => (
+                  <div
+                    key={quote.id}
+                    className="flex items-center gap-3 p-4 hover:bg-surface-secondary/30 transition-colors"
                   >
-                    {quote.status === "Under Review" && (
-                      <Clock className="h-3 w-3" />
-                    )}
-                    {quote.status}
-                  </span>
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-sm)] bg-surface-secondary">
+                      <FileText className="h-5 w-5 text-text-secondary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-text-primary truncate">
+                        {quote.productName}
+                      </p>
+                      <p className="text-xs text-text-secondary">
+                        {quote.quantity.toLocaleString()} units ·{" "}
+                        {quote.destinationCountry}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold shrink-0",
+                        quote.status === "Submitted"
+                          ? "bg-info/10 text-info border-info/20"
+                          : quote.status === "Under Review"
+                            ? "bg-warning/10 text-warning border-warning/20"
+                            : "bg-brand/10 text-brand border-brand/20"
+                      )}
+                    >
+                      {quote.status === "Under Review" && (
+                        <Clock className="h-3 w-3" />
+                      )}
+                      {quote.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center">
+                  <FileText className="h-10 w-10 text-text-disabled mx-auto mb-3" />
+                  <p className="text-sm text-text-secondary">No quote requests yet.</p>
                 </div>
-              ))}
+              )}
             </div>
           </Card>
         </div>

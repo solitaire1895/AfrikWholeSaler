@@ -5,15 +5,26 @@ import {
   Circle,
   Clock,
   MapPin,
-  Search,
   Copy,
   ExternalLink,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { shipments, orders } from "@/lib/data";
+import {
+  getCurrentCustomer,
+  getShipmentsByCustomer,
+  getOrdersByCustomer,
+} from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
-export default function ShipmentsPage() {
+export default async function ShipmentsPage() {
+  const customer = await getCurrentCustomer();
+  if (!customer) return null;
+
+  const [shipments, orders] = await Promise.all([
+    getShipmentsByCustomer(customer.id),
+    getOrdersByCustomer(customer.id),
+  ]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
