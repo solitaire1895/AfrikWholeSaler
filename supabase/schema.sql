@@ -485,6 +485,18 @@ AS $$
   );
 $$;
 
+CREATE OR REPLACE FUNCTION is_super_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+    AND role = 'super_admin'
+  );
+$$;
+
 -- ---- Profiles ----
 DROP POLICY IF EXISTS "Profiles: read own or staff reads all" ON profiles;
 CREATE POLICY "Profiles: read own or staff reads all"
@@ -506,6 +518,11 @@ DROP POLICY IF EXISTS "Profiles: admin inserts" ON profiles;
 CREATE POLICY "Profiles: admin inserts"
   ON profiles FOR INSERT
   WITH CHECK (is_admin());
+
+DROP POLICY IF EXISTS "Profiles: admin deletes" ON profiles;
+CREATE POLICY "Profiles: admin deletes"
+  ON profiles FOR DELETE
+  USING (is_admin());
 
 -- ---- Categories ----
 DROP POLICY IF EXISTS "Categories: public read" ON categories;

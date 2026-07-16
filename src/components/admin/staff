@@ -67,12 +67,16 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+
+  // User search state for Add Staff form
   const [userSearch, setUserSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
+  // Existing staff user IDs to exclude from search
   const staffUserIds = new Set(staff.map((s) => s.userId));
 
+  // Filter profiles for the search dropdown
   const filteredProfiles = userSearch.trim()
     ? profiles.filter((p) => {
         const q = userSearch.toLowerCase();
@@ -109,7 +113,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
 
   function handleUserSelect(user: UserProfile) {
     setSelectedUser(user);
-    setUserSearch((user.firstName + " " + user.lastName).trim() || user.email);
+    setUserSearch(`${user.firstName} ${user.lastName}`.trim() || user.email);
     setShowUserDropdown(false);
   }
 
@@ -197,7 +201,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
   }
 
   function handleDelete(member: StaffMember) {
-    if (!confirm("Are you sure you want to delete " + member.firstName + " " + member.lastName + "? This will remove their profile and staff record. This action cannot be undone.")) {
+    if (!confirm(`Are you sure you want to delete ${member.firstName} ${member.lastName}? This will remove their profile and staff record. This action cannot be undone.`)) {
       return;
     }
     startTransition(async () => {
@@ -214,7 +218,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Staff &amp; Roles</h1>
+          <h1 className="text-2xl font-bold text-navy tracking-tight">Staff & Roles</h1>
           <p className="mt-1 text-sm text-text-secondary">
             Manage team members and their permissions.
           </p>
@@ -350,6 +354,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
         </Card>
       )}
 
+      {/* Staff Form Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4">
           <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">

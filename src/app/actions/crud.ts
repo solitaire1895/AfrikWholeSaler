@@ -761,8 +761,8 @@ export async function createStaffMember(input: {
     .eq("id", user.id)
     .single();
 
-  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can add staff members." };
+  if (!profile || profile.role !== "super_admin") {
+    return { success: false, error: "Only super admins can add staff members." };
   }
 
   const { data, error } = await supabase
@@ -875,6 +875,107 @@ export async function updateStaffMember(
 
   revalidatePath("/admin/staff");
   return { success: true, data };
+}
+
+export async function suspendUser(userId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can suspend users." };
+  }
+
+  if (user.id === userId) {
+    return { success: false, error: "You cannot suspend your own account." };
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ is_active: false })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/customers");
+  return { success: true, data };
+}
+
+export async function unsuspendUser(userId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can unsuspend users." };
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ is_active: true })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/customers");
+  return { success: true, data };
+}
+
+export async function deleteUser(userId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can delete users." };
+  }
+
+  if (user.id === userId) {
+    return { success: false, error: "You cannot delete your own account." };
+  }
+
+  // Delete staff row if exists (staff references auth.users via ON DELETE CASCADE,
+  // but we're deleting from profiles, not auth.users, so we clean up manually)
+  await supabase
+    .from("staff")
+    .delete()
+    .eq("user_id", userId);
+
+  // Delete the profile (auth.users entry remains but user can't use the app without a profile)
+  const { error } = await supabase
+    .from("profiles")
+    .delete()
+    .eq("id", userId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/customers");
+  return { success: true };
 }
 
 // --- Profile Actions ---

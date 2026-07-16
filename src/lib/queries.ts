@@ -874,19 +874,20 @@ export async function getAllStaff(): Promise<Array<{
   avatarUrl: string | null;
   hireDate: string | null;
   isActive: boolean;
+  profileIsActive: boolean;
 }>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("staff")
     .select(`
       *,
-      profiles!inner(email, first_name, last_name, role, avatar_url)
+      profiles!inner(email, first_name, last_name, role, avatar_url, is_active)
     `)
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
 
-  return (data as unknown as Array<StaffRow & { profiles: { email: string; first_name: string | null; last_name: string | null; role: string; avatar_url: string | null } }>).map((row) => ({
+  return (data as unknown as Array<StaffRow & { profiles: { email: string; first_name: string | null; last_name: string | null; role: string; avatar_url: string | null; is_active: boolean } }>).map((row) => ({
     id: row.id,
     userId: row.user_id,
     employeeId: row.employee_id,
@@ -898,6 +899,35 @@ export async function getAllStaff(): Promise<Array<{
     role: row.profiles?.role || "staff",
     avatarUrl: row.profiles?.avatar_url || null,
     hireDate: row.hire_date,
+    isActive: row.is_active,
+    profileIsActive: row.profiles?.is_active ?? true,
+  }));
+}
+
+// --- All Profiles (for admin user search) ---
+
+export async function getAllProfiles(): Promise<Array<{
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isActive: boolean;
+}>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, first_name, last_name, role, is_active")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+
+  return (data as Array<{ id: string; email: string; first_name: string | null; last_name: string | null; role: string; is_active: boolean }>).map((row) => ({
+    id: row.id,
+    email: row.email,
+    firstName: row.first_name || "",
+    lastName: row.last_name || "",
+    role: row.role,
     isActive: row.is_active,
   }));
 }
