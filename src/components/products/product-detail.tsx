@@ -37,6 +37,7 @@ export function ProductDetail({
 }) {
   const [quantity, setQuantity] = useState(product.moq ?? 100);
   const [destination, setDestination] = useState("Senegal");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const destinations = [
     "Senegal",
@@ -101,7 +102,7 @@ export function ProductDetail({
               <div className="relative aspect-square overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface-secondary">
                 {product.images.length > 0 ? (
                   <Image
-                    src={product.images[0]}
+                    src={product.images[selectedImageIndex]}
                     alt={product.name}
                     fill
                     sizes="(max-width: 1024px) 100vw, 50vw"
@@ -119,25 +120,29 @@ export function ProductDetail({
                   ))}
                 </div>
               </div>
-              {/* Thumbnail strip */}
-              <div className="flex gap-3">
-                {product.images.length > 0 && (
-                  <div className="relative h-20 w-20 overflow-hidden rounded-[var(--radius-sm)] border-2 border-brand bg-surface-secondary">
-                    <Image
-                      src={product.images[0]}
-                      alt={product.name}
-                      fill
-                      sizes="80px"
-                      className="object-cover"
-                    />
-                  </div>
-                )}
-                {product.images.length > 1 && (
-                  <div className="flex h-20 w-20 items-center justify-center rounded-[var(--radius-sm)] border-2 border-border bg-surface-secondary text-text-disabled text-xs">
-                    +{product.images.length - 1} More
-                  </div>
-                )}
-              </div>
+              {/* Thumbnail strip — all images clickable */}
+              {product.images.length > 1 && (
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {product.images.map((img, idx) => (
+                    <button
+                      key={`${img}-${idx}`}
+                      onClick={() => setSelectedImageIndex(idx)}
+                      className={cn(
+                        "relative h-20 w-20 shrink-0 overflow-hidden rounded-[var(--radius-sm)] border-2 bg-surface-secondary transition-colors",
+                        idx === selectedImageIndex ? "border-brand" : "border-border hover:border-brand/40"
+                      )}
+                    >
+                      <Image
+                        src={img}
+                        alt={`${product.name} - image ${idx + 1}`}
+                        fill
+                        sizes="80px"
+                        className="object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Product Info */}

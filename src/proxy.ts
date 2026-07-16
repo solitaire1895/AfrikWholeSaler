@@ -2,6 +2,17 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 /**
+ * Cookie options for persistent sessions (30 days).
+ * Ensures users stay logged in across browser restarts.
+ */
+const cookieOptions = {
+  maxAge: 60 * 60 * 24 * 30, // 30 days
+  sameSite: "lax" as const,
+  secure: true,
+  path: "/",
+};
+
+/**
  * Proxy (formerly middleware in Next.js < 16) runs before routes.
  * It refreshes the Supabase auth session on every request and
  * protects routes that require authentication.
@@ -25,7 +36,7 @@ export async function proxy(request: NextRequest) {
           );
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
+            response.cookies.set(name, value, { ...cookieOptions, ...options })
           );
         },
       },

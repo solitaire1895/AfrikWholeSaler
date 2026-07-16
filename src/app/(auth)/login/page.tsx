@@ -15,7 +15,9 @@ function LoginPageContent() {
   const redirect = searchParams.get("redirect") || "/dashboard";
 
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  // Default to true so users stay logged in across visits (30-day persistent cookies).
+  // When unchecked, cookies are downgraded to session-only (cleared on browser close).
+  const [rememberMe, setRememberMe] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
@@ -41,6 +43,20 @@ function LoginPageContent() {
         if (error) {
           setErrors({ general: error.message });
         } else {
+          // If "Remember me" is unchecked, downgrade the persistent cookies
+          // (30-day expiry) to session-only cookies that expire when the
+          // browser is closed. We do this by re-setting each auth cookie
+          // without a maxAge.
+          if (!rememberMe) {
+            document.cookie.split(";").forEach((cookie) => {
+              const name = cookie.split("=")[0].trim();
+              if (name.startsWith("sb-") && name.endsWith("-auth-token")) {
+                const value = cookie.split("=").slice(1).join("=").trim();
+                document.cookie = `${name}=${value}; path=/; samesite=lax`;
+              }
+            });
+          }
+
           router.push(redirect);
           router.refresh();
         }

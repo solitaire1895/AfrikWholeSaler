@@ -2,6 +2,17 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 /**
+ * Cookie options for persistent sessions (30 days).
+ * Users stay logged in across browser restarts by default.
+ */
+const cookieOptions = {
+  maxAge: 60 * 60 * 24 * 30, // 30 days
+  sameSite: "lax" as const,
+  secure: true,
+  path: "/",
+};
+
+/**
  * Creates a Supabase client for use in Server Components, Route Handlers,
  * and Server Actions. Reads/writes auth cookies via next/headers.
  *
@@ -21,7 +32,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              cookieStore.set(name, value, { ...cookieOptions, ...options })
             );
           } catch {
             // The `setAll` method was called from a Server Component.

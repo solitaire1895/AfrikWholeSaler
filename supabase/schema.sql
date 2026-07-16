@@ -496,6 +496,12 @@ CREATE POLICY "Profiles: update own"
   ON profiles FOR UPDATE
   USING (id = auth.uid());
 
+DROP POLICY IF EXISTS "Profiles: admin updates all" ON profiles;
+CREATE POLICY "Profiles: admin updates all"
+  ON profiles FOR UPDATE
+  USING (is_admin())
+  WITH CHECK (is_admin());
+
 DROP POLICY IF EXISTS "Profiles: admin inserts" ON profiles;
 CREATE POLICY "Profiles: admin inserts"
   ON profiles FOR INSERT
@@ -675,12 +681,43 @@ CREATE POLICY "Staff: admin write"
   WITH CHECK (is_admin());
 
 -- ============================================================================
--- 16. Storage Buckets (run manually in Supabase Dashboard if needed)
+-- 16. Storage Buckets & Policies
 -- ============================================================================
--- product-images  — public bucket for product photos
+
+-- product-images — public bucket for product photos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-images', 'product-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies for product-images bucket
+-- Public read access (anyone can view product images)
+DROP POLICY IF EXISTS "Product images: public read" ON storage.objects;
+CREATE POLICY "Product images: public read"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'product-images');
+
+-- Admin-only upload (insert)
+DROP POLICY IF EXISTS "Product images: admin upload" ON storage.objects;
+CREATE POLICY "Product images: admin upload"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'product-images' AND is_admin());
+
+-- Admin-only update
+DROP POLICY IF EXISTS "Product images: admin update" ON storage.objects;
+CREATE POLICY "Product images: admin update"
+  ON storage.objects FOR UPDATE
+  USING (bucket_id = 'product-images' AND is_admin());
+
+-- Admin-only delete
+DROP POLICY IF EXISTS "Product images: admin delete" ON storage.objects;
+CREATE POLICY "Product images: admin delete"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'product-images' AND is_admin());
+
 -- customer-docs   — private bucket for KYC/customs documents (signed URLs only)
 -- chat-attachments — private bucket for chat file uploads
 -- quote-attachments — private bucket for quote request attachments
+-- (Create these manually in Supabase Dashboard when needed)
 
 -- ============================================================================
 -- Done. This script is idempotent and can be re-run safely.

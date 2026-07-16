@@ -749,6 +749,7 @@ export async function createStaffMember(input: {
   department: string;
   position?: string;
   hireDate?: string;
+  role?: string;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -779,7 +780,63 @@ export async function createStaffMember(input: {
 
   if (error) return { success: false, error: error.message };
 
+  // If a role was provided, update the user's profile role
+  if (input.role) {
+    const validRoles = ["customer", "sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
+    if (!validRoles.includes(input.role)) {
+      return { success: false, error: "Invalid role specified." };
+    }
+
+    const { error: roleError } = await supabase
+      .from("profiles")
+      .update({ role: input.role })
+      .eq("id", input.userId);
+
+    if (roleError) {
+      return { success: false, error: roleError.message };
+    }
+  }
+
   revalidatePath("/admin/staff");
+  return { success: true, data };
+}
+
+export async function updateUserRole(userId: string, role: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can change user roles." };
+  }
+
+  // Prevent admin from changing their own role (self-lockout guard)
+  if (user.id === userId) {
+    return { success: false, error: "You cannot change your own role." };
+  }
+
+  const validRoles = ["customer", "sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
+  if (!validRoles.includes(role)) {
+    return { success: false, error: "Invalid role specified." };
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ role })
+    .eq("id", userId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/customers");
   return { success: true, data };
 }
 
@@ -856,7 +913,7 @@ export async function updateProfile(input: {
   return { success: true, data };
 }
 
-// --- File Upload Action ---
+// --- File Upload Actions ---
 
 export async function uploadFile(bucket: string, filePath: string, file: File): Promise<ActionResult> {
   const supabase = await createClient();
@@ -877,4 +934,90 @@ export async function uploadFile(bucket: string, filePath: string, file: File): 
     .getPublicUrl(filePath);
 
   return { success: true, data: { path: data.path, url: urlData.publicUrl } };
+}
+
+export async function uploadProductImages(files: File[]): Promise<ActionResult & { data?: { urls: string[] } }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can upload product images." };
+  }
+
+  const urls: string[] = [];
+  const errors: string[] = [];
+
+  for (const file of files) {
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      errors.push(`${file.name} is not an image`);
+      continue;
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      errors.push(`${file.name} exceeds 10MB limit`);
+      continue;
+    }
+
+    // Generate unique file path
+    const ext = file.name.split(".").pop() || "jpg";
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`;
+    const filePath = `products/${fileName}`;
+
+    const { data, error } = await supabase.storage
+      .from("product-images")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (error) {
+      errors.push(`${file.name}: ${error.message}`);
+      continue;
+    }
+
+    const { data: urlData } = supabase.storage
+      .from("product-images")
+      .getPublicUrl(data.path);
+
+    urls.push(urlData.publicUrl);
+  }
+
+  if (urls.length === 0) {
+    return { success: false, error: errors.join("; ") || "No images were uploaded" };
+  }
+
+  return { success: true, data: { urls }, error: errors.length > 0 ? errors.join("; ") : undefined };
+}
+
+export async function deleteProductImage(filePath: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can delete product images." };
+  }
+
+  const { error } = await supabase.storage
+    .from("product-images")
+    .remove([filePath]);
+
+  if (error) return { success: false, error: error.message };
+
+  return { success: true };
 }

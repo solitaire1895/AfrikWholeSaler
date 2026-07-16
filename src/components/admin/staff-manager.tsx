@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { ShieldCheck, Plus, Mail, Edit2, X, UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { createStaffMember, updateStaffMember } from "@/app/actions/crud";
+import { createStaffMember, updateStaffMember, updateUserRole } from "@/app/actions/crud";
 
 interface StaffMember {
   id: string;
@@ -29,6 +29,7 @@ const roleColors: Record<string, string> = {
   warehouse_staff: "bg-gold/10 text-gold border-gold/20",
   logistics_staff: "bg-gold/10 text-gold border-gold/20",
   operations_manager: "bg-info/10 text-info border-info/20",
+  customer: "bg-surface-secondary text-text-secondary border-border",
 };
 
 const roleLabels: Record<string, string> = {
@@ -39,6 +40,7 @@ const roleLabels: Record<string, string> = {
   warehouse_staff: "Warehouse Staff",
   logistics_staff: "Logistics Coordinator",
   operations_manager: "Operations Manager",
+  customer: "Customer",
 };
 
 const departments = ["Sales", "Support", "Warehouse", "Logistics", "Operations", "Management"];
@@ -93,6 +95,7 @@ export function StaffManager({ staff }: StaffManagerProps) {
           department: formData.get("department") as string,
           position: formData.get("position") as string || undefined,
           hireDate: formData.get("hireDate") as string || undefined,
+          role: formData.get("role") as string || undefined,
         });
         if (result.success) {
           closeForm();
@@ -109,6 +112,17 @@ export function StaffManager({ staff }: StaffManagerProps) {
       const result = await updateStaffMember(member.id, { isActive: !member.isActive });
       if (!result.success) {
         setError(result.error || "Failed to update staff status");
+      } else {
+        window.location.reload();
+      }
+    });
+  }
+
+  function handleRoleChange(member: StaffMember, newRole: string) {
+    startTransition(async () => {
+      const result = await updateUserRole(member.userId, newRole);
+      if (!result.success) {
+        setError(result.error || "Failed to update role");
       } else {
         window.location.reload();
       }
@@ -169,6 +183,20 @@ export function StaffManager({ staff }: StaffManagerProps) {
                 <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", member.isActive ? "bg-success/10 text-success" : "bg-surface-secondary text-text-secondary")}>
                   {member.isActive ? "Active" : "Inactive"}
                 </span>
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs font-medium text-text-secondary mb-1">Change Role</label>
+                <select
+                  value={member.role}
+                  onChange={(e) => handleRoleChange(member, e.target.value)}
+                  disabled={isPending}
+                  className="w-full h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
+                >
+                  {Object.entries(roleLabels).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="text-xs text-text-secondary space-y-1 mb-3">
@@ -283,6 +311,19 @@ export function StaffManager({ staff }: StaffManagerProps) {
                     />
                   </div>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">Role</label>
+                <select
+                  name="role"
+                  defaultValue={editingStaff?.role || "sales_rep"}
+                  className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
+                >
+                  {Object.entries(roleLabels).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
               </div>
 
               {editingStaff && (
