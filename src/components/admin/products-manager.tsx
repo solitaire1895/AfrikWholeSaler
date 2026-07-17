@@ -14,18 +14,32 @@ import {
   ChevronLeft,
   ChevronRight,
   Link as LinkIcon,
+  Video,
+  Trash,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
-import { createProduct, updateProduct, deleteProduct, uploadProductImages } from "@/app/actions/crud";
-import type { Product, Category } from "@/types";
+import {
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  uploadProductImages,
+  uploadProductVideo,
+  deleteProductVideo,
+} from "@/app/actions/crud";
+import type { Product, Category, SubCategory, PriceTier } from "@/types";
 
 interface ProductsManagerProps {
   products: Product[];
   categories: Category[];
+  subCategories: SubCategory[];
 }
 
-export function ProductsManager({ products: initialProducts, categories }: ProductsManagerProps) {
+export function ProductsManager({
+  products: initialProducts,
+  categories,
+  subCategories,
+}: ProductsManagerProps) {
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -40,6 +54,20 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
   const [manualUrl, setManualUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Video management state
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  // Pricing tiers state
+  const [priceTiers, setPriceTiers] = useState<PriceTier[]>([
+    { minQuantity: 1, maxQuantity: null, price: 0, currency: "USD" },
+  ]);
+
+  // Sub-category state
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+  const [selectedSubCategorySlug, setSelectedSubCategorySlug] = useState<string>("");
+
   const filteredProducts = products.filter((p) => {
     if (categoryFilter !== "all" && p.categorySlug !== categoryFilter) return false;
     if (search.trim()) {
@@ -49,10 +77,19 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
     return true;
   });
 
+  // Filter sub-categories based on selected category
+  const availableSubCategories = selectedCategoryId
+    ? subCategories.filter((sc) => sc.categoryId === selectedCategoryId)
+    : [];
+
   function openAddForm() {
     setEditingProduct(null);
     setImageUrls([]);
     setManualUrl("");
+    setVideoUrl(null);
+    setPriceTiers([{ minQuantity: 1, maxQuantity: null, price: 0, currency: "USD" }]);
+    setSelectedCategoryId("");
+    setSelectedSubCategorySlug("");
     setShowForm(true);
     setError(null);
   }
@@ -61,6 +98,16 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
     setEditingProduct(product);
     setImageUrls(product.images);
     setManualUrl("");
+    setVideoUrl(product.videoUrl);
+    setPriceTiers(
+      product.priceTiers.length > 0
+        ? product.priceTiers
+        : [{ minQuantity: product.moq, maxQuantity: null, price: 0, currency: "USD" }]
+    );
+    // Find the category ID from the categories list
+    const cat = categories.find((c) => c.slug === product.categorySlug);
+    setSelectedCategoryId(cat?.id || "");
+    setSelectedSubCategorySlug(product.subCategorySlug || "");
     setShowForm(true);
     setError(null);
   }
@@ -71,6 +118,10 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
     setError(null);
     setImageUrls([]);
     setManualUrl("");
+    setVideoUrl(null);
+    setPriceTiers([{ minQuantity: 1, maxQuantity: null, price: 0, currency: "USD" }]);
+    setSelectedCategoryId("");
+    setSelectedSubCategorySlug("");
   }
 
   function handleDelete(productId: string) {
@@ -108,7 +159,6 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
       setError("Failed to upload images. Please try again.");
     } finally {
       setIsUploading(false);
-      // Reset file input so the same file can be selected again
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -155,10 +205,85 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
     setManualUrl("");
   }
 
+  // --- Video upload handlers ---
+
+  const handleVideoSelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+
+    setIsUploadingVideo(true);
+    setError(null);
+
+    try {
+      const result = await uploadProductVideo(file);
+      if (result.success && result.data?.url) {
+        setVideoUrl(result.data.url);
+      } else {
+        setError(result.error || "Failed to upload video");
+      }
+    } catch {
+      setError("Failed to upload video. Please try again.");
+    } finally {
+      setIsUploadingVideo(false);
+      if (videoInputRef.current) {
+        videoInputRef.current.value = "";
+      }
+    }
+  }, []);
+
+  async function handleRemoveVideo() {
+    if (!videoUrl) return;
+    // Extract file path from URL for deletion
+    const urlParts = videoUrl.split("/");
+    const filePath = urlParts.slice(-2).join("/"); // user_id/filename.ext
+
+    startTransition(async () => {
+      const result = await deleteProductVideo(filePath);
+      if (result.success) {
+        setVideoUrl(null);
+      } else {
+        setError(result.error || "Failed to remove video");
+      }
+    });
+  }
+
+  // --- Pricing tier handlers ---
+
+  function addPriceTier() {
+    const lastTier = priceTiers[priceTiers.length - 1];
+    const newMin = lastTier?.maxQuantity ? lastTier.maxQuantity + 1 : (lastTier?.minQuantity || 1) + 1;
+    setPriceTiers([...priceTiers, { minQuantity: newMin, maxQuantity: null, price: 0, currency: "USD" }]);
+  }
+
+  function removePriceTier(index: number) {
+    if (priceTiers.length === 1) return; // Keep at least one tier
+    setPriceTiers(priceTiers.filter((_, i) => i !== index));
+  }
+
+  function updatePriceTier(index: number, field: keyof PriceTier, value: string | number | null) {
+    setPriceTiers((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  }
+
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
       const categoryName = formData.get("category") as string;
       const categoryObj = categories.find((c) => c.name === categoryName);
+      const subCategorySlug = formData.get("subCategorySlug") as string;
+      const subCategoryObj = subCategories.find((sc) => sc.slug === subCategorySlug);
+
+      const moq = parseInt(formData.get("moq") as string) || 1;
+
+      // Ensure first tier's minQuantity matches MOQ
+      const finalPriceTiers = priceTiers.map((tier, idx) => ({
+        ...tier,
+        minQuantity: idx === 0 ? moq : tier.minQuantity,
+        price: parseFloat(String(tier.price)) || 0,
+      }));
+
       const input = {
         name: formData.get("name") as string,
         slug: formData.get("slug") as string || (formData.get("name") as string).toLowerCase().replace(/\s+/g, "-"),
@@ -166,12 +291,14 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
         category: categoryName,
         categorySlug: categoryObj?.slug || "",
         categoryId: categoryObj?.id,
+        subCategory: subCategoryObj?.name || null,
+        subCategorySlug: subCategoryObj?.slug || null,
+        subCategoryId: subCategoryObj?.id || null,
         originCountry: formData.get("originCountry") as string || "China",
         images: imageUrls,
-        moq: parseInt(formData.get("moq") as string) || 1,
-        priceTiers: [
-          { minQuantity: parseInt(formData.get("moq") as string) || 1, maxQuantity: null, price: parseFloat(formData.get("price") as string) || 0, currency: "USD" },
-        ],
+        videoUrl: videoUrl,
+        moq,
+        priceTiers: finalPriceTiers,
         stockStatus: formData.get("stockStatus") as string || "In Stock",
         stockQuantity: parseInt(formData.get("stockQuantity") as string) || 0,
         badges: [] as string[],
@@ -184,7 +311,6 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
         if (result.success) {
           setShowForm(false);
           setEditingProduct(null);
-          // Refresh the page to get updated data
           window.location.reload();
         } else {
           setError(result.error || "Failed to update product");
@@ -222,8 +348,11 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
       </div>
 
       {error && (
-        <div className="rounded-[var(--radius-sm)] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
-          {error}
+        <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-error/70 hover:text-error">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
@@ -286,6 +415,9 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
                       <span className="text-sm text-text-secondary">{product.category}</span>
+                      {product.subCategory && (
+                        <span className="text-xs text-text-disabled block">{product.subCategory}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-sm font-semibold text-navy">{formatPrice(product.priceTiers[0]?.price ?? 0)}</p>
@@ -393,12 +525,18 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                 />
               </div>
 
+              {/* Category & Sub-Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">Category</label>
                   <select
                     name="category"
                     defaultValue={editingProduct?.category || ""}
+                    onChange={(e) => {
+                      const cat = categories.find((c) => c.name === e.target.value);
+                      setSelectedCategoryId(cat?.id || "");
+                      setSelectedSubCategorySlug("");
+                    }}
                     required
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
                   >
@@ -409,11 +547,42 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                   </select>
                 </div>
                 <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Sub-Category (optional)</label>
+                  <select
+                    name="subCategorySlug"
+                    value={selectedSubCategorySlug}
+                    onChange={(e) => setSelectedSubCategorySlug(e.target.value)}
+                    disabled={!selectedCategoryId || availableSubCategories.length === 0}
+                    className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">No sub-category</option>
+                    {availableSubCategories.map((sc) => (
+                      <option key={sc.id} value={sc.slug}>{sc.name}</option>
+                    ))}
+                  </select>
+                  {!selectedCategoryId && (
+                    <p className="text-xs text-text-disabled mt-1">Select a category first</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">Origin Country</label>
                   <input
                     type="text"
                     name="originCountry"
                     defaultValue={editingProduct?.originCountry || "China"}
+                    className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Stock Quantity</label>
+                  <input
+                    type="number"
+                    name="stockQuantity"
+                    defaultValue={0}
+                    min={0}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
                   />
                 </div>
@@ -483,7 +652,6 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                               Main
                             </div>
                           )}
-                          {/* Remove button */}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -494,7 +662,6 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                           >
                             <X className="h-3 w-3" />
                           </button>
-                          {/* Reorder buttons */}
                           <div className="absolute bottom-1 right-1 flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                             <button
                               type="button"
@@ -557,43 +724,89 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Video Upload Section */}
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Product Video (optional)
+                </label>
+
+                {videoUrl ? (
+                  <div className="space-y-2">
+                    <div className="relative rounded-[var(--radius-sm)] border border-border bg-surface-secondary overflow-hidden">
+                      <video
+                        src={videoUrl}
+                        controls
+                        className="w-full max-h-64 object-contain"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveVideo}
+                        disabled={isPending}
+                        className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-navy/70 text-white hover:bg-error transition-colors disabled:opacity-50"
+                      >
+                        <Trash className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <p className="text-xs text-text-disabled">
+                      Video uploaded. Click trash icon to remove.
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => videoInputRef.current?.click()}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 rounded-[var(--radius-input)] border-2 border-dashed border-border bg-surface-secondary/30 px-4 py-6 cursor-pointer transition-colors hover:border-brand hover:bg-brand-light/20",
+                      isUploadingVideo && "border-brand bg-brand-light/20"
+                    )}
+                  >
+                    {isUploadingVideo ? (
+                      <>
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                        <p className="text-xs text-text-secondary">Uploading video...</p>
+                      </>
+                    ) : (
+                      <>
+                        <Video className="h-6 w-6 text-text-disabled" />
+                        <p className="text-xs text-text-secondary text-center">
+                          <span className="font-medium text-brand">Click to upload</span> a product video
+                        </p>
+                        <p className="text-xs text-text-disabled">MP4, WebM up to 100MB</p>
+                      </>
+                    )}
+                  </div>
+                )}
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => handleVideoSelect(e.target.files)}
+                  className="hidden"
+                />
+              </div>
+
+              {/* MOQ */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">MOQ</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Minimum Order Quantity (MOQ)</label>
                   <input
                     type="number"
                     name="moq"
                     defaultValue={editingProduct?.moq || 1}
                     min={1}
                     required
+                    onChange={(e) => {
+                      const newMoq = parseInt(e.target.value) || 1;
+                      // Update first tier's minQuantity to match MOQ
+                      setPriceTiers((prev) => {
+                        if (prev.length === 0) return prev;
+                        const next = [...prev];
+                        next[0] = { ...next[0], minQuantity: newMoq };
+                        return next;
+                      });
+                    }}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Base Price (USD)</label>
-                  <input
-                    type="number"
-                    name="price"
-                    defaultValue={editingProduct?.priceTiers[0]?.price || 0}
-                    min={0}
-                    step="0.01"
-                    required
-                    className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Stock Quantity</label>
-                  <input
-                    type="number"
-                    name="stockQuantity"
-                    defaultValue={0}
-                    min={0}
-                    className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">Stock Status</label>
                   <select
@@ -607,21 +820,93 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                     <option value="Pre-Order">Pre-Order</option>
                   </select>
                 </div>
-                <div className="flex items-end pb-2">
-                  <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="featured"
-                      defaultChecked={editingProduct?.featured || false}
-                      className="h-4 w-4 rounded border-border"
-                    />
-                    Featured Product
-                  </label>
-                </div>
               </div>
 
-              {/* Hidden category slug - will be set from the selected category */}
-              <input type="hidden" name="categorySlug" value="" />
+              {/* Price Tiers Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-medium text-text-secondary">
+                    Price Tiers
+                    <span className="ml-1 text-text-disabled">({priceTiers.length} tier{priceTiers.length !== 1 ? "s" : ""})</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addPriceTier}
+                    className="flex h-7 items-center gap-1 rounded-[var(--radius-sm)] border border-border px-2 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add Tier
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {priceTiers.map((tier, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-12 gap-2 items-center rounded-[var(--radius-sm)] border border-border bg-surface-secondary/30 p-2"
+                    >
+                      <div className="col-span-3">
+                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">Min Qty</label>
+                        <input
+                          type="number"
+                          value={tier.minQuantity}
+                          onChange={(e) => updatePriceTier(index, "minQuantity", parseInt(e.target.value) || 0)}
+                          min={0}
+                          className="w-full h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs focus:border-brand focus:outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">Max Qty</label>
+                        <input
+                          type="number"
+                          value={tier.maxQuantity ?? ""}
+                          onChange={(e) => updatePriceTier(index, "maxQuantity", e.target.value ? parseInt(e.target.value) : null)}
+                          min={0}
+                          placeholder="∞"
+                          className="w-full h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs focus:border-brand focus:outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">Price (USD)</label>
+                        <input
+                          type="number"
+                          value={tier.price}
+                          onChange={(e) => updatePriceTier(index, "price", parseFloat(e.target.value) || 0)}
+                          min={0}
+                          step="0.01"
+                          className="w-full h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs focus:border-brand focus:outline-none"
+                        />
+                      </div>
+                      <div className="col-span-3 flex items-end justify-end pb-0.5">
+                        <button
+                          type="button"
+                          onClick={() => removePriceTier(index)}
+                          disabled={priceTiers.length === 1}
+                          className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-30"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-text-disabled mt-1.5">
+                  Define bulk pricing tiers. Leave Max Qty empty for "∞" (no upper limit). First tier min qty auto-syncs with MOQ.
+                </p>
+              </div>
+
+              {/* Featured checkbox */}
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="featured"
+                    defaultChecked={editingProduct?.featured || false}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  Featured Product
+                </label>
+              </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-border">
                 <button
@@ -633,10 +918,10 @@ export function ProductsManager({ products: initialProducts, categories }: Produ
                 </button>
                 <button
                   type="submit"
-                  disabled={isPending || isUploading}
+                  disabled={isPending || isUploading || isUploadingVideo}
                   className="flex h-10 items-center rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
                 >
-                  {isPending ? "Saving..." : isUploading ? "Uploading..." : editingProduct ? "Update Product" : "Create Product"}
+                  {isPending ? "Saving..." : isUploading ? "Uploading images..." : isUploadingVideo ? "Uploading video..." : editingProduct ? "Update Product" : "Create Product"}
                 </button>
               </div>
             </form>

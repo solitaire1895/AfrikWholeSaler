@@ -38,6 +38,7 @@ export interface Product {
   subCategory: string | null;
   subCategorySlug: string | null;
   images: string[];
+  videoUrl: string | null;
   originCountry: string;
   moq: number;
   priceTiers: PriceTier[];
@@ -94,12 +95,19 @@ export interface CustomerAddress {
 
 export interface Customer {
   id: string;
+  userId: string | null;
   email: string;
   firstName: string;
   lastName: string;
   phone: string;
   company: string;
+  country: string;
+  city: string | null;
+  role: string;
+  isActive: boolean;
   verificationStatus: VerificationStatus;
+  totalOrders: number;
+  totalSpent: number;
   addresses: CustomerAddress[];
   createdAt: string;
 }

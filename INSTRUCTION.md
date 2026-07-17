@@ -27,16 +27,21 @@ The following steps must be completed manually before the backend will function.
 
 ---
 
-## 3. Create Storage Buckets
+## 3. Storage Buckets
 
-In the Supabase Dashboard, go to **Storage** → **New Bucket** and create these 4 buckets:
+The `schema.sql` script (Step 2) automatically creates these buckets with RLS policies:
 
-| Bucket Name | Public? | Purpose |
-|---|---|---|
-| `product-images` | ✅ Public | Product photos |
-| `customer-docs` | 🔒 Private | KYC / customs documents |
-| `chat-attachments` | 🔒 Private | Chat file uploads |
-| `quote-attachments` | 🔒 Private | Quote request attachments |
+| Bucket Name | Public? | Purpose | Auto-created? |
+|---|---|---|---|
+| `product-images` | ✅ Public | Product photos | ✅ Yes (by schema.sql) |
+| `product-videos` | ✅ Public | Product videos | ✅ Yes (by schema.sql) |
+| `chat-attachments` | 🔒 Private | Chat file uploads | ✅ Yes (by schema.sql) |
+| `customer-docs` | 🔒 Private | KYC / customs documents | ❌ Create manually |
+| `quote-attachments` | 🔒 Private | Quote request attachments | ❌ Create manually |
+
+Only create the two **private** buckets manually in the Supabase Dashboard (**Storage** → **New Bucket**):
+- `customer-docs` (private)
+- `quote-attachments` (private)
 
 ---
 
@@ -88,17 +93,19 @@ Once you have an admin user (Step 6), log in and use the admin product managemen
 
 ---
 
-## 8. Enable Real-time (Optional)
+## 8. Enable Real-time (Required for Live Chat)
 
-To use the real-time chat and order tracking features:
+The live chat system uses Supabase Realtime (WebSocket-based) to push new messages instantly to both customers and staff. Without this step, messages will only appear on page refresh — not in real-time.
 
 1. In Supabase Dashboard, go to **Database** → **Replication**.
 2. Under **Supabase Realtime**, enable replication for these tables:
-   - `messages`
-   - `orders`
-   - `shipments`
-   - `quote_requests`
-   - `conversations`
+   - `messages` — **Required** for live chat
+   - `conversations` — **Required** for live chat (new conversation notifications)
+   - `orders` — Recommended (real-time order status updates)
+   - `shipments` — Recommended (real-time shipment tracking)
+   - `quote_requests` — Recommended (real-time quote status updates)
+
+> ⚠️ **At minimum, enable `messages` and `conversations`** — the live chat will not work in real-time without them.
 
 ---
 

@@ -120,3 +120,62 @@ export async function fetchRecentMessages(limit = 8): Promise<Message[]> {
   if (error || !data) return [];
   return data.map(mapMessageRow).reverse();
 }
+
+/**
+ * Staff-only: fetch all messages including internal notes
+ */
+export async function fetchAllMessages(conversationId: string): Promise<Message[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("messages")
+    .select(
+      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at"
+    )
+    .eq("conversation_id", conversationId)
+    .order("created_at", { ascending: true });
+
+  if (error || !data) return [];
+  return data.map(mapMessageRow);
+}
+
+/**
+ * Staff-only: fetch all conversations with unread counts
+ */
+export async function fetchAllConversationsWithUnread(): Promise<Conversation[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("conversations")
+    .select(
+      "id, customer_id, priority, tags, status, last_message_at, assigned_agent_id, created_at, subject, customers(company_name, contact_name)"
+    )
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+
+  if (error || !data) return [];
+
+  const result: Conversation[] = [];
+
+  for (const c of data as Array<Record<string, unknown>>) {
+    const cust = c.customers as { company_name?: string; contact_name?: string } | null;
+
+    // Get unread count
+    const { count } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("conversation_id", c.id as string)
+      .is("read_at", null)
+      .neq("sender_type", "agent");
+
+    result.push({
+      id: c.id as string,
+      customerId: (c.customer_id as string) ?? "",
+      customerName: cust?.contact_name || cust?.company_name || (c.subject as string) || "Customer",
+      assignedAgentId: (c.assigned_agent_id as string) ?? null,
+      priority: mapPriority(c.priority as string),
+      tags: (c.tags as string[]) ?? [],
+      unreadCount: count || 0,
+      lastMessageAt: (c.last_message_at as string) ?? (c.created_at as string),
+    });
+  }
+
+  return result;
+}

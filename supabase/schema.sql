@@ -245,6 +245,31 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
 
+-- Deduplicate customers: keep the oldest row per user_id, delete the rest.
+-- This MUST run before the unique constraint is added.
+DO $$
+BEGIN
+  DELETE FROM public.customers
+  WHERE id IN (
+    SELECT id FROM (
+      SELECT id,
+             ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at ASC) AS rn
+      FROM public.customers
+      WHERE user_id IS NOT NULL
+    ) dupes
+    WHERE dupes.rn > 1
+  );
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+-- Ensure one customer per auth user (prevents duplicate creation on login)
+DO $$ BEGIN
+  ALTER TABLE customers ADD CONSTRAINT customers_user_id_unique UNIQUE (user_id);
+EXCEPTION WHEN duplicate_table THEN NULL;
+         WHEN duplicate_object THEN NULL;
+         WHEN OTHERS THEN NULL;
+END $$;
+
 -- ----------------------------------------------------------------------------
 -- 7. Orders
 -- ----------------------------------------------------------------------------
@@ -731,8 +756,52 @@ CREATE POLICY "Product images: admin delete"
   ON storage.objects FOR DELETE
   USING (bucket_id = 'product-images' AND is_admin());
 
+-- product-videos — public bucket for product videos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('product-videos', 'product-videos', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Product videos: public read" ON storage.objects;
+CREATE POLICY "Product videos: public read"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'product-videos');
+
+DROP POLICY IF EXISTS "Product videos: admin upload" ON storage.objects;
+CREATE POLICY "Product videos: admin upload"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'product-videos' AND is_admin());
+
+DROP POLICY IF EXISTS "Product videos: admin update" ON storage.objects;
+CREATE POLICY "Product videos: admin update"
+  ON storage.objects FOR UPDATE
+  USING (bucket_id = 'product-videos' AND is_admin());
+
+DROP POLICY IF EXISTS "Product videos: admin delete" ON storage.objects;
+CREATE POLICY "Product videos: admin delete"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'product-videos' AND is_admin());
+
+-- chat-attachments — private bucket for chat file uploads (signed URLs only)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat-attachments', 'chat-attachments', false)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Chat attachments: auth read" ON storage.objects;
+CREATE POLICY "Chat attachments: auth read"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'chat-attachments' AND auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Chat attachments: auth upload" ON storage.objects;
+CREATE POLICY "Chat attachments: auth upload"
+  ON storage.objects FOR INSERT
+  WITH CHECK (bucket_id = 'chat-attachments' AND auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Chat attachments: owner delete" ON storage.objects;
+CREATE POLICY "Chat attachments: owner delete"
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'chat-attachments' AND auth.uid() IS NOT NULL);
+
 -- customer-docs   — private bucket for KYC/customs documents (signed URLs only)
--- chat-attachments — private bucket for chat file uploads
 -- quote-attachments — private bucket for quote request attachments
 -- (Create these manually in Supabase Dashboard when needed)
 

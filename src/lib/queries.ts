@@ -30,6 +30,7 @@ interface ProductRow {
   origin_country: string;
   image_url: string | null;
   images: string[] | null;
+  video_url: string | null;
   moq: number;
   price_tiers: Array<{ minQuantity: number; maxQuantity: number | null; price: number; currency: string }> | null;
   stock_status: string;
@@ -66,6 +67,7 @@ function mapProduct(row: ProductRow): Product {
     subCategory: row.sub_category || null,
     subCategorySlug: row.sub_category_slug || null,
     images,
+    videoUrl: row.video_url || null,
     originCountry: row.origin_country,
     moq: row.moq,
     priceTiers: row.price_tiers || [],
@@ -142,18 +144,26 @@ interface CustomerRow {
   total_orders: number;
   total_spent: number;
   created_at: string;
+  profiles?: { role: string; is_active: boolean } | null;
 }
 
 function mapCustomer(row: CustomerRow): Customer {
   const [firstName, ...lastNameParts] = row.contact_name.split(" ");
   return {
     id: row.id,
+    userId: row.user_id,
     email: row.email,
     firstName: firstName || "",
     lastName: lastNameParts.join(" "),
     phone: row.phone || "",
     company: row.company_name,
+    country: row.country,
+    city: row.city || null,
+    role: row.profiles?.role || "customer",
+    isActive: row.profiles?.is_active ?? true,
     verificationStatus: row.verification_status.charAt(0).toUpperCase() + row.verification_status.slice(1) as Customer["verificationStatus"],
+    totalOrders: row.total_orders,
+    totalSpent: Number(row.total_spent),
     addresses: row.address
       ? [{
           id: `${row.id}-addr`,
@@ -490,7 +500,7 @@ export async function getCurrentCustomer(): Promise<Customer | null> {
     .from("customers")
     .select("*")
     .eq("user_id", user.id)
-    .single();
+    .maybeSingle();
 
   if (data) return mapCustomer(data as CustomerRow);
 
@@ -542,7 +552,7 @@ export async function getAllCustomers(): Promise<Customer[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("customers")
-    .select("*")
+    .select("*, profiles!left(role, is_active)")
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
@@ -1005,4 +1015,76 @@ export async function getRelatedProducts(product: Product, limit = 4): Promise<P
 
   if (error || !data) return [];
   return (data as ProductRow[]).map(mapProduct);
+}
+
+// --- Purchase Requests ---
+
+export interface PurchaseRequest {
+  id: string;
+  prNumber: string;
+  quoteRequestId: string | null;
+  productName: string;
+  description: string | null;
+  quantity: number;
+  targetUnitPrice: number | null;
+  factoryName: string | null;
+  factoryContact: string | null;
+  factoryQuotedPrice: number | null;
+  status: string;
+  notes: string | null;
+  adminNotes: string | null;
+  requestedBy: string;
+  expectedDeliveryDate: string | null;
+  createdAt: string;
+}
+
+interface PurchaseRequestRow {
+  id: string;
+  pr_number: string;
+  quote_request_id: string | null;
+  product_name: string;
+  description: string | null;
+  quantity: number;
+  target_unit_price: number | null;
+  factory_name: string | null;
+  factory_contact: string | null;
+  factory_quoted_price: number | null;
+  status: string;
+  notes: string | null;
+  admin_notes: string | null;
+  requested_by: string;
+  expected_delivery_date: string | null;
+  created_at: string;
+}
+
+function mapPurchaseRequest(row: PurchaseRequestRow): PurchaseRequest {
+  return {
+    id: row.id,
+    prNumber: row.pr_number,
+    quoteRequestId: row.quote_request_id,
+    productName: row.product_name,
+    description: row.description,
+    quantity: row.quantity,
+    targetUnitPrice: row.target_unit_price ? Number(row.target_unit_price) : null,
+    factoryName: row.factory_name,
+    factoryContact: row.factory_contact,
+    factoryQuotedPrice: row.factory_quoted_price ? Number(row.factory_quoted_price) : null,
+    status: row.status,
+    notes: row.notes,
+    adminNotes: row.admin_notes,
+    requestedBy: row.requested_by,
+    expectedDeliveryDate: row.expected_delivery_date,
+    createdAt: row.created_at,
+  };
+}
+
+export async function getAllPurchaseRequests(): Promise<PurchaseRequest[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("purchase_requests")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return (data as PurchaseRequestRow[]).map(mapPurchaseRequest);
 }

@@ -206,6 +206,93 @@ export async function markMessagesRead(conversationId: string): Promise<ActionRe
   return { success: true };
 }
 
+export async function assignConversation(conversationId: string, agentId: string | null): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin", "sales_rep", "support_agent", "operations_manager"].includes(profile.role)) {
+    return { success: false, error: "Only staff can assign conversations." };
+  }
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .update({ assigned_agent_id: agentId })
+    .eq("id", conversationId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/messages");
+  revalidatePath("/dashboard/messages");
+  return { success: true, data };
+}
+
+export async function updateConversationStatus(conversationId: string, status: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin", "sales_rep", "support_agent", "operations_manager"].includes(profile.role)) {
+    return { success: false, error: "Only staff can update conversation status." };
+  }
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .update({ status })
+    .eq("id", conversationId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/messages");
+  revalidatePath("/dashboard/messages");
+  return { success: true, data };
+}
+
+export async function updateConversationPriority(conversationId: string, priority: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin", "sales_rep", "support_agent", "operations_manager"].includes(profile.role)) {
+    return { success: false, error: "Only staff can update conversation priority." };
+  }
+
+  const { data, error } = await supabase
+    .from("conversations")
+    .update({ priority })
+    .eq("id", conversationId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/messages");
+  revalidatePath("/dashboard/messages");
+  return { success: true, data };
+}
+
 // --- Product Actions (admin only) ---
 
 export async function createProduct(input: {
@@ -226,6 +313,7 @@ export async function createProduct(input: {
   stockQuantity: number;
   badges: string[];
   specs: Array<{ label: string; value: string }>;
+  videoUrl?: string | null;
   featured: boolean;
   shippingEstimate?: string;
   importTaxRate?: number;
@@ -264,6 +352,7 @@ export async function createProduct(input: {
       price_tiers: input.priceTiers,
       stock_status: input.stockStatus,
       stock_quantity: input.stockQuantity,
+      video_url: input.videoUrl || null,
       badges: input.badges,
       specs: input.specs,
       featured: input.featured,
@@ -1014,6 +1103,131 @@ export async function updateProfile(input: {
   return { success: true, data };
 }
 
+// --- Purchase Request Actions (staff only) ---
+
+export async function createPurchaseRequest(input: {
+  quoteRequestId?: string | null;
+  productName: string;
+  description?: string;
+  quantity: number;
+  targetUnitPrice?: number;
+  factoryName?: string;
+  factoryContact?: string;
+  factoryQuotedPrice?: number;
+  status?: string;
+  notes?: string;
+  adminNotes?: string;
+  expectedDeliveryDate?: string;
+}): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return { success: false, error: "Profile not found." };
+
+  const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
+  if (!staffRoles.includes(profile.role)) {
+    return { success: false, error: "Only staff can create purchase requests." };
+  }
+
+  const prNumber = `PR-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 100000)).padStart(5, "0")}`;
+
+  const { data, error } = await supabase
+    .from("purchase_requests")
+    .insert({
+      pr_number: prNumber,
+      quote_request_id: input.quoteRequestId || null,
+      product_name: input.productName,
+      description: input.description || null,
+      quantity: input.quantity,
+      target_unit_price: input.targetUnitPrice || null,
+      factory_name: input.factoryName || null,
+      factory_contact: input.factoryContact || null,
+      factory_quoted_price: input.factoryQuotedPrice || null,
+      status: input.status || "draft",
+      notes: input.notes || null,
+      admin_notes: input.adminNotes || null,
+      requested_by: user.id,
+      expected_delivery_date: input.expectedDeliveryDate || null,
+    })
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/purchase-requests");
+  return { success: true, data };
+}
+
+export async function updatePurchaseRequest(
+  prId: string,
+  input: Record<string, unknown>
+): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return { success: false, error: "Profile not found." };
+
+  const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
+  if (!staffRoles.includes(profile.role)) {
+    return { success: false, error: "Only staff can update purchase requests." };
+  }
+
+  const { data, error } = await supabase
+    .from("purchase_requests")
+    .update(input)
+    .eq("id", prId)
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/purchase-requests");
+  return { success: true, data };
+}
+
+export async function deletePurchaseRequest(prId: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile) return { success: false, error: "Profile not found." };
+
+  const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
+  if (!staffRoles.includes(profile.role)) {
+    return { success: false, error: "Only staff can delete purchase requests." };
+  }
+
+  const { error } = await supabase
+    .from("purchase_requests")
+    .delete()
+    .eq("id", prId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/purchase-requests");
+  return { success: true };
+}
+
 // --- File Upload Actions ---
 
 export async function uploadFile(bucket: string, filePath: string, file: File): Promise<ActionResult> {
@@ -1035,6 +1249,76 @@ export async function uploadFile(bucket: string, filePath: string, file: File): 
     .getPublicUrl(filePath);
 
   return { success: true, data: { path: data.path, url: urlData.publicUrl } };
+}
+
+
+export async function uploadProductVideo(file: File): Promise<ActionResult & { data?: { url: string } }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can upload product videos." };
+  }
+
+  // Validate file type
+  if (!file.type.startsWith("video/")) {
+    return { success: false, error: "File must be a video." };
+  }
+
+  // Validate file size (max 100MB)
+  if (file.size > 100 * 1024 * 1024) {
+    return { success: false, error: "Video must be smaller than 100MB." };
+  }
+
+  const ext = file.name.split(".").pop() || "mp4";
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const filePath = `${user.id}/${fileName}`;
+
+  const { data, error } = await supabase.storage
+    .from("product-videos")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false,
+    });
+
+  if (error) return { success: false, error: error.message };
+
+  const { data: urlData } = supabase.storage
+    .from("product-videos")
+    .getPublicUrl(data.path);
+
+  return { success: true, data: { url: urlData.publicUrl } };
+}
+
+export async function deleteProductVideo(filePath: string): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: "Only admins can delete product videos." };
+  }
+
+  const { error } = await supabase.storage
+    .from("product-videos")
+    .remove([filePath]);
+
+  if (error) return { success: false, error: error.message };
+
+  return { success: true };
 }
 
 export async function uploadProductImages(files: File[]): Promise<ActionResult & { data?: { urls: string[] } }> {

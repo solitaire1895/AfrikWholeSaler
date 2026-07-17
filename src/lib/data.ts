@@ -147,6 +147,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1583863788434-e58a36330269?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 100,
     priceTiers: [
       { minQuantity: 100, maxQuantity: 499, price: 3.2, currency: "USD" },
@@ -182,6 +183,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 200,
     priceTiers: [
       { minQuantity: 200, maxQuantity: 499, price: 2.5, currency: "USD" },
@@ -217,6 +219,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1565814329452-e1efa11c5b89?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 50,
     priceTiers: [
       { minQuantity: 50, maxQuantity: 199, price: 18.5, currency: "USD" },
@@ -252,6 +255,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 100,
     priceTiers: [
       { minQuantity: 100, maxQuantity: 499, price: 8.5, currency: "USD" },
@@ -287,6 +291,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 500,
     priceTiers: [
       { minQuantity: 500, maxQuantity: 1999, price: 1.2, currency: "USD" },
@@ -322,6 +327,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1504148455338-c2583d470217?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 30,
     priceTiers: [
       { minQuantity: 30, maxQuantity: 99, price: 42.0, currency: "USD" },
@@ -357,6 +363,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 100,
     priceTiers: [
       { minQuantity: 100, maxQuantity: 499, price: 12.5, currency: "USD" },
@@ -392,6 +399,7 @@ export const products: Product[] = [
       "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80",
     ],
     originCountry: "China",
+    videoUrl: null,
     moq: 1000,
     priceTiers: [
       { minQuantity: 1000, maxQuantity: 4999, price: 0.45, currency: "USD" },
@@ -654,12 +662,19 @@ export const valueProps = [
 
 export const currentCustomer: Customer = {
   id: "cust-1",
+  userId: "user-1",
   email: "amadou.diallo@diallodistribution.com",
   firstName: "Amadou",
   lastName: "Diallo",
   phone: "+221 77 123 45 67",
   company: "Diallo Distribution SARL",
+  country: "Senegal",
+  city: "Dakar",
+  role: "customer",
+  isActive: true,
   verificationStatus: "Verified",
+  totalOrders: 12,
+  totalSpent: 28450,
   addresses: [
     {
       id: "addr-1",
