@@ -5,108 +5,116 @@ import type { Product } from "@/types";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatPrice } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 
 export function ProductCard({ product }: { product: Product }) {
+  const { formatPrice: formatCurrencyPrice } = useCurrency();
   const lowestPrice = product.priceTiers[product.priceTiers.length - 1]?.price ?? 0;
   const startingPrice = product.priceTiers[0]?.price ?? 0;
 
   return (
-    <Card hover className="group flex flex-col overflow-hidden">
-      {/* Image */}
-      <div className="relative aspect-square overflow-hidden rounded-t-[var(--radius-card)] bg-surface-secondary">
-        <Image
-          src={product.images[0]}
-          alt={product.name}
-          fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-        />
-        {/* Badges */}
-        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-          {product.badges.slice(0, 2).map((badge) => (
-            <Badge key={badge} badge={badge} />
-          ))}
-        </div>
-        {/* Favorite */}
-        <button
-          className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm text-text-secondary hover:text-brand transition-colors"
-          aria-label="Add to wishlist"
-        >
-          <Heart className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="flex flex-1 flex-col p-3">
-        {/* Category & Rating */}
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-xs font-medium text-text-secondary">
-            {product.category}
-          </span>
-          <div className="flex items-center gap-1">
-            <Star className="h-3 w-3 fill-gold text-gold" />
-            <span className="text-xs font-semibold text-text-primary">
-              {product.rating}
-            </span>
-            <span className="text-xs text-text-disabled">
-              ({product.reviewCount})
-            </span>
+    <Link href={`/products/${product.slug}`} className="block">
+      <Card hover className="group flex flex-col overflow-hidden cursor-pointer">
+        {/* Image */}
+        <div className="relative aspect-square overflow-hidden rounded-t-[var(--radius-card)] bg-surface-secondary">
+          <Image
+            src={product.images[0]}
+            alt={product.name}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          {/* Badges */}
+          <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+            {product.badges.slice(0, 2).map((badge) => (
+              <Badge key={badge} badge={badge} />
+            ))}
           </div>
+          {/* Favorite */}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/80 backdrop-blur-sm text-text-secondary hover:text-brand transition-colors"
+            aria-label="Add to wishlist"
+          >
+            <Heart className="h-3.5 w-3.5" />
+          </button>
         </div>
 
-        {/* Name */}
-        <Link href={`/products/${product.slug}`}>
+        {/* Content */}
+        <div className="flex flex-1 flex-col p-3">
+          {/* Category & Rating */}
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs font-medium text-text-secondary">
+              {product.category}
+            </span>
+            <div className="flex items-center gap-1">
+              <Star className="h-3 w-3 fill-gold text-gold" />
+              <span className="text-xs font-semibold text-text-primary">
+                {product.rating}
+              </span>
+              <span className="text-xs text-text-disabled">
+                ({product.reviewCount})
+              </span>
+            </div>
+          </div>
+
+          {/* Name */}
           <h3 className="font-semibold text-text-primary text-sm leading-snug mb-1.5 line-clamp-2 group-hover:text-brand transition-colors">
             {product.name}
           </h3>
-        </Link>
 
-        {/* Price */}
-        <div className="mb-2">
-          <div className="flex items-baseline gap-1">
-            <span className="text-base font-bold text-text-primary">
-              {formatPrice(startingPrice)}
-            </span>
-            <span className="text-xs text-text-secondary">/ unit</span>
+          {/* Price */}
+          <div className="mb-2">
+            <div className="flex items-baseline gap-1">
+              <span className="text-base font-bold text-text-primary">
+                {formatCurrencyPrice(startingPrice)}
+              </span>
+              <span className="text-xs text-text-secondary">/ unit</span>
+            </div>
+            <p className="text-xs text-text-secondary mt-0.5">
+              From{" "}
+              <span className="font-semibold text-success">
+                {formatCurrencyPrice(lowestPrice)}
+              </span>{" "}
+              at {product.priceTiers[product.priceTiers.length - 1]?.minQuantity}+ units
+            </p>
           </div>
-          <p className="text-xs text-text-secondary mt-0.5">
-            From{" "}
-            <span className="font-semibold text-success">
-              {formatPrice(lowestPrice)}
-            </span>{" "}
-            at {product.priceTiers[product.priceTiers.length - 1]?.minQuantity}+ units
-          </p>
-        </div>
 
-        {/* MOQ & Shipping */}
-        <div className="flex items-center gap-2 text-xs text-text-secondary mb-3 mt-auto">
-          <span className="flex items-center gap-1">
-            MOQ: <span className="font-semibold text-text-primary">{product.moq}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            <Truck className="h-3 w-3" />
-            {product.deliveryEstimate}
-          </span>
-        </div>
+          {/* MOQ & Shipping */}
+          <div className="flex items-center gap-2 text-xs text-text-secondary mb-3 mt-auto">
+            <span className="flex items-center gap-1">
+              MOQ: <span className="font-semibold text-text-primary">{product.moq}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <Truck className="h-3 w-3" />
+              {product.deliveryEstimate}
+            </span>
+          </div>
 
-        {/* Actions */}
-        <div className="flex gap-2">
-          <Link
-            href={`/quote?product=${product.slug}`}
-            className="flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-button)] bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition-colors"
-          >
-            <FileText className="h-3 w-3" />
-            Quote
-          </Link>
-          <Link
-            href="/chat"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-button)] border border-border text-text-secondary hover:text-brand hover:border-brand/30 transition-colors"
-            aria-label="Chat about this product"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-          </Link>
+          {/* Actions */}
+          <div className="flex gap-2">
+            <Link
+              href={`/quote?product=${product.slug}`}
+              onClick={(e) => e.stopPropagation()}
+              className="flex-1 inline-flex h-8 items-center justify-center gap-1.5 rounded-[var(--radius-button)] bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition-colors"
+            >
+              <FileText className="h-3 w-3" />
+              Quote
+            </Link>
+            <Link
+              href="/chat"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-button)] border border-border text-text-secondary hover:text-brand hover:border-brand/30 transition-colors"
+              aria-label="Chat about this product"
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+            </Link>
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+    </Link>
   );
 }

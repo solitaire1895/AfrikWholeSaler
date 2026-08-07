@@ -387,9 +387,35 @@ export async function updateProduct(productId: string, input: Record<string, unk
     return { success: false, error: "Only admins can update products." };
   }
 
+  // Map camelCase input keys to snake_case DB columns
+  const updateData: Record<string, unknown> = {};
+  if (input.name !== undefined) updateData.name = input.name;
+  if (input.slug !== undefined) updateData.slug = input.slug;
+  if (input.description !== undefined) updateData.description = input.description;
+  if (input.category !== undefined) updateData.category = input.category;
+  if (input.categorySlug !== undefined) updateData.category_slug = input.categorySlug;
+  if (input.categoryId !== undefined) updateData.category_id = input.categoryId;
+  if (input.subCategory !== undefined) updateData.sub_category = input.subCategory;
+  if (input.subCategorySlug !== undefined) updateData.sub_category_slug = input.subCategorySlug;
+  if (input.subCategoryId !== undefined) updateData.sub_category_id = input.subCategoryId;
+  if (input.originCountry !== undefined) updateData.origin_country = input.originCountry;
+  if (input.images !== undefined) updateData.images = input.images;
+  if (input.videoUrl !== undefined) updateData.video_url = input.videoUrl;
+  if (input.moq !== undefined) updateData.moq = input.moq;
+  if (input.priceTiers !== undefined) updateData.price_tiers = input.priceTiers;
+  if (input.stockStatus !== undefined) updateData.stock_status = input.stockStatus;
+  if (input.stockQuantity !== undefined) updateData.stock_quantity = input.stockQuantity;
+  if (input.badges !== undefined) updateData.badges = input.badges;
+  if (input.specs !== undefined) updateData.specs = input.specs;
+  if (input.featured !== undefined) updateData.featured = input.featured;
+  if (input.shippingEstimate !== undefined) updateData.shipping_estimate = input.shippingEstimate;
+  if (input.importTaxRate !== undefined) updateData.import_tax_rate = input.importTaxRate;
+  if (input.deliveryDaysMin !== undefined) updateData.delivery_days_min = input.deliveryDaysMin;
+  if (input.deliveryDaysMax !== undefined) updateData.delivery_days_max = input.deliveryDaysMax;
+
   const { data, error } = await supabase
     .from("products")
-    .update(input)
+    .update(updateData)
     .eq("id", productId)
     .select()
     .single();

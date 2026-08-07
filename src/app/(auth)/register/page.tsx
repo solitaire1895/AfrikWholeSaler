@@ -25,20 +25,35 @@ import {
 } from "@/components/ui/auth-helpers";
 import { createClient } from "@/lib/supabase/client";
 
-const africanCountries = [
-  "Nigeria",
-  "Kenya",
-  "Cameroon",
-  "Senegal",
-  "Ghana",
-  "South Africa",
-  "Tanzania",
-  "Uganda",
-  "Rwanda",
-  "Ivory Coast",
-  "Ethiopia",
-  "Zambia",
-  "Other",
+const countryGroups: { region: string; countries: string[] }[] = [
+  {
+    region: "Africa",
+    countries: ["Senegal", "Nigeria", "Cameroon", "Kenya", "Ghana", "Ivory Coast", "South Africa", "Egypt", "Morocco", "Tanzania", "Ethiopia", "Uganda", "Algeria", "Tunisia", "Mozambique", "DR Congo", "Rwanda", "Zambia", "Zimbabwe", "Botswana", "Madagascar", "Mali", "Burkina Faso", "Benin", "Togo", "Gabon", "Congo", "Mauritius", "Namibia", "Angola"],
+  },
+  {
+    region: "Europe",
+    countries: ["Germany", "France", "United Kingdom", "Italy", "Spain", "Netherlands", "Belgium", "Switzerland", "Poland", "Sweden", "Norway", "Denmark", "Finland", "Portugal", "Austria", "Ireland", "Czech Republic", "Greece", "Romania", "Hungary", "Croatia", "Bulgaria", "Slovakia", "Ukraine", "Lithuania", "Latvia", "Estonia"],
+  },
+  {
+    region: "North America",
+    countries: ["United States", "Canada", "Mexico", "Guatemala", "Panama", "Costa Rica", "Dominican Republic", "Honduras", "Jamaica", "Cuba", "El Salvador", "Trinidad and Tobago", "Bahamas", "Barbados"],
+  },
+  {
+    region: "South America",
+    countries: ["Brazil", "Argentina", "Colombia", "Chile", "Peru", "Venezuela", "Ecuador", "Bolivia", "Paraguay", "Uruguay", "Guyana", "Suriname"],
+  },
+  {
+    region: "Asia",
+    countries: ["China", "India", "Vietnam", "Thailand", "Indonesia", "Malaysia", "Philippines", "Japan", "South Korea", "Bangladesh", "Pakistan", "Sri Lanka", "Cambodia", "Myanmar", "Taiwan", "Singapore", "Hong Kong"],
+  },
+  {
+    region: "Middle East",
+    countries: ["Turkey", "United Arab Emirates", "Saudi Arabia", "Israel", "Qatar", "Kuwait", "Oman", "Jordan", "Lebanon", "Bahrain"],
+  },
+  {
+    region: "Oceania",
+    countries: ["Australia", "New Zealand", "Fiji"],
+  },
 ];
 
 export default function RegisterPage() {
@@ -223,10 +238,14 @@ export default function RegisterPage() {
                 <option value="" disabled>
                   Select country
                 </option>
-                {africanCountries.map((country) => (
-                  <option key={country} value={country} className="text-text-primary">
-                    {country}
-                  </option>
+                {countryGroups.map((group) => (
+                  <optgroup key={group.region} label={group.region}>
+                    {group.countries.map((country) => (
+                      <option key={country} value={country} className="text-text-primary">
+                        {country}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>

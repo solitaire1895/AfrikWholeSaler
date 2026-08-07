@@ -1,0 +1,137 @@
+"use client";
+
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+
+// Hardcoded fallback currencies (used if DB fetch fails)
+const FALLBACK_CURRENCIES: CurrencyInfo[] = [
+  { code: "USD", name: "US Dollar", symbol: "$", rateToUsd: 1.0 },
+  { code: "EUR", name: "Euro", symbol: "€", rateToUsd: 1.08 },
+  { code: "GBP", name: "British Pound", symbol: "£", rateToUsd: 1.27 },
+  { code: "XAF", name: "CFA Franc BEAC", symbol: "FCFA", rateToUsd: 0.0017 },
+  { code: "XOF", name: "CFA Franc BCEAO", symbol: "CFA", rateToUsd: 0.0017 },
+  { code: "NGN", name: "Nigerian Naira", symbol: "₦", rateToUsd: 0.0007 },
+  { code: "KES", name: "Kenyan Shilling", symbol: "KSh", rateToUsd: 0.0078 },
+  { code: "GHS", name: "Ghanaian Cedi", symbol: "₵", rateToUsd: 0.065 },
+  { code: "ZAR", name: "South African Rand", symbol: "R", rateToUsd: 0.054 },
+  { code: "BRL", name: "Brazilian Real", symbol: "R$", rateToUsd: 0.20 },
+  { code: "CAD", name: "Canadian Dollar", symbol: "C$", rateToUsd: 0.73 },
+  { code: "CNY", name: "Chinese Yuan", symbol: "¥", rateToUsd: 0.14 },
+  { code: "INR", name: "Indian Rupee", symbol: "₹", rateToUsd: 0.012 },
+  { code: "AED", name: "UAE Dirham", symbol: "AED", rateToUsd: 0.272 },
+];
+
+export interface CurrencyInfo {
+  code: string;
+  name: string;
+  symbol: string;
+  rateToUsd: number; // 1 unit of this currency = rateToUsd USD
+}
+
+interface CurrencyContextValue {
+  currency: string;
+  currencies: CurrencyInfo[];
+  setCurrency: (code: string) => void;
+  convertPrice: (priceInUsd: number) => number;
+  formatPrice: (priceInUsd: number) => string;
+  formatPriceWithSymbol: (priceInUsd: number) => string;
+}
+
+const CurrencyContext = createContext<CurrencyContextValue | null>(null);
+
+export function CurrencyProvider({ children }: { children: ReactNode }) {
+  const [currency, setCurrencyState] = useState("USD");
+  const [currencies, setCurrencies] = useState<CurrencyInfo[]>(FALLBACK_CURRENCIES);
+
+  // Load saved currency from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("preferred_currency");
+    if (saved) setCurrencyState(saved);
+  }, []);
+
+  // Fetch currencies from Supabase
+  useEffect(() => {
+    async function fetchCurrencies() {
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from("currencies")
+          .select("code, name, symbol, rate_to_usd")
+          .eq("is_active", true)
+          .order("name", { ascending: true });
+
+        if (!error && data && data.length > 0) {
+          setCurrencies(
+            data.map((c: { code: string; name: string; symbol: string; rate_to_usd: number }) => ({
+              code: c.code,
+              name: c.name,
+              symbol: c.symbol,
+              rateToUsd: Number(c.rate_to_usd),
+            }))
+          );
+        }
+      } catch {
+        // Keep fallback currencies if fetch fails
+      }
+    }
+    fetchCurrencies();
+  }, []);
+
+  const setCurrency = useCallback((code: string) => {
+    setCurrencyState(code);
+    localStorage.setItem("preferred_currency", code);
+  }, []);
+
+  const convertPrice = useCallback(
+    (priceInUsd: number): number => {
+      const targetCurrency = currencies.find((c) => c.code === currency);
+      if (!targetCurrency || targetCurrency.rateToUsd === 0) return priceInUsd;
+      // Convert: USD -> target currency
+      // If 1 EUR = 1.08 USD, then 100 USD = 100 / 1.08 = 92.59 EUR
+      return priceInUsd / targetCurrency.rateToUsd;
+    },
+    [currency, currencies]
+  );
+
+  const formatPrice = useCallback(
+    (priceInUsd: number): string => {
+      const converted = convertPrice(priceInUsd);
+      const targetCurrency = currencies.find((c) => c.code === currency);
+      const symbol = targetCurrency?.symbol || "$";
+
+      // Format with appropriate decimal places
+      if (currency === "XAF" || currency === "XOF" || currency === "JPY") {
+        // No decimals for these currencies
+        return `${symbol} ${Math.round(converted).toLocaleString("en-US")}`;
+      }
+      return `${symbol} ${converted.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    },
+    [convertPrice, currency, currencies]
+  );
+
+  const formatPriceWithSymbol = useCallback(
+    (priceInUsd: number): string => {
+      return formatPrice(priceInUsd);
+    },
+    [formatPrice]
+  );
+
+  return (
+    <CurrencyContext.Provider
+      value={{ currency, currencies, setCurrency, convertPrice, formatPrice, formatPriceWithSymbol }}
+    >
+      {children}
+    </CurrencyContext.Provider>
+  );
+}
+
+export function useCurrency() {
+  const context = useContext(CurrencyContext);
+  if (!context) {
+    throw new Error("useCurrency must be used within a CurrencyProvider");
+  }
+  return context;
+}

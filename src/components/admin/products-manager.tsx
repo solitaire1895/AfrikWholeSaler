@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useCallback } from "react";
+import { useState, useTransition, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import {
   Package,
@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import {
   createProduct,
   updateProduct,
@@ -40,9 +41,15 @@ export function ProductsManager({
   categories,
   subCategories,
 }: ProductsManagerProps) {
+  const { formatPrice: formatCurrencyPrice } = useCurrency();
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // Sync local state when server component re-renders with fresh data
+  useEffect(() => {
+    setProducts(initialProducts);
+  }, [initialProducts]);
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -309,15 +316,39 @@ export function ProductsManager({
       if (editingProduct) {
         const result = await updateProduct(editingProduct.id, input);
         if (result.success) {
+          // Update local state immediately
+          setProducts((prev) =>
+            prev.map((p) =>
+              p.id === editingProduct.id
+                ? {
+                    ...p,
+                    name: input.name,
+                    slug: input.slug,
+                    description: input.description,
+                    category: input.category,
+                    categorySlug: input.categorySlug,
+                    subCategory: input.subCategory,
+                    subCategorySlug: input.subCategorySlug,
+                    originCountry: input.originCountry,
+                    images: input.images,
+                    videoUrl: input.videoUrl,
+                    moq: input.moq,
+                    priceTiers: input.priceTiers,
+                    stockStatus: input.stockStatus as Product["stockStatus"],
+                    featured: input.featured,
+                  }
+                : p
+            )
+          );
           setShowForm(false);
           setEditingProduct(null);
-          window.location.reload();
         } else {
           setError(result.error || "Failed to update product");
         }
       } else {
         const result = await createProduct(input);
         if (result.success) {
+          // The server action returns the created product; reload to get fresh data
           setShowForm(false);
           window.location.reload();
         } else {
@@ -420,9 +451,9 @@ export function ProductsManager({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm font-semibold text-navy">{formatPrice(product.priceTiers[0]?.price ?? 0)}</p>
+                      <p className="text-sm font-semibold text-navy">{formatCurrencyPrice(product.priceTiers[0]?.price ?? 0)}</p>
                       {product.priceTiers.length > 1 && (
-                        <p className="text-xs text-text-secondary">to {formatPrice(product.priceTiers[product.priceTiers.length - 1]?.price ?? 0)}</p>
+                        <p className="text-xs text-text-secondary">to {formatCurrencyPrice(product.priceTiers[product.priceTiers.length - 1]?.price ?? 0)}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">

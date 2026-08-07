@@ -550,13 +550,31 @@ export async function getCustomerById(id: string): Promise<Customer | null> {
 
 export async function getAllCustomers(): Promise<Customer[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("customers")
-    .select("*, profiles!left(role, is_active)")
-    .order("created_at", { ascending: false });
+  
+  // Fetch customers and profiles separately (join through auth.users doesn't work via API)
+  const [customersRes, profilesRes] = await Promise.all([
+    supabase.from("customers").select("*").order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id, role, is_active"),
+  ]);
 
-  if (error || !data) return [];
-  return (data as CustomerRow[]).map(mapCustomer);
+  if (customersRes.error || !customersRes.data) return [];
+
+  // Build a profile lookup map
+  const profileMap = new Map<string, { role: string; is_active: boolean }>();
+  if (profilesRes.data) {
+    for (const p of profilesRes.data as Array<{ id: string; role: string; is_active: boolean }>) {
+      profileMap.set(p.id, { role: p.role, is_active: p.is_active });
+    }
+  }
+
+  // Merge profile data into customer rows
+  return (customersRes.data as CustomerRow[]).map((row) => {
+    const profile = row.user_id ? profileMap.get(row.user_id) : null;
+    return mapCustomer({
+      ...row,
+      profiles: profile ? { role: profile.role, is_active: profile.is_active } : null,
+    });
+  });
 }
 
 // --- Orders ---
@@ -887,31 +905,41 @@ export async function getAllStaff(): Promise<Array<{
   profileIsActive: boolean;
 }>> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("staff")
-    .select(`
-      *,
-      profiles!inner(email, first_name, last_name, role, avatar_url, is_active)
-    `)
-    .order("created_at", { ascending: false });
+  
+  // Fetch staff and profiles separately (join through auth.users doesn't work via API)
+  const [staffRes, profilesRes] = await Promise.all([
+    supabase.from("staff").select("*").order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id, email, first_name, last_name, role, avatar_url, is_active"),
+  ]);
 
-  if (error || !data) return [];
+  if (staffRes.error || !staffRes.data) return [];
 
-  return (data as unknown as Array<StaffRow & { profiles: { email: string; first_name: string | null; last_name: string | null; role: string; avatar_url: string | null; is_active: boolean } }>).map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    employeeId: row.employee_id,
-    department: row.department || "General",
-    position: row.position || "Staff",
-    firstName: row.profiles?.first_name || "",
-    lastName: row.profiles?.last_name || "",
-    email: row.profiles?.email || "",
-    role: row.profiles?.role || "staff",
-    avatarUrl: row.profiles?.avatar_url || null,
-    hireDate: row.hire_date,
-    isActive: row.is_active,
-    profileIsActive: row.profiles?.is_active ?? true,
-  }));
+  // Build a profile lookup map
+  const profileMap = new Map<string, { email: string; first_name: string | null; last_name: string | null; role: string; avatar_url: string | null; is_active: boolean }>();
+  if (profilesRes.data) {
+    for (const p of profilesRes.data as Array<{ id: string; email: string; first_name: string | null; last_name: string | null; role: string; avatar_url: string | null; is_active: boolean }>) {
+      profileMap.set(p.id, p);
+    }
+  }
+
+  return (staffRes.data as StaffRow[]).map((row) => {
+    const profile = profileMap.get(row.user_id);
+    return {
+      id: row.id,
+      userId: row.user_id,
+      employeeId: row.employee_id,
+      department: row.department || "General",
+      position: row.position || "Staff",
+      firstName: profile?.first_name || "",
+      lastName: profile?.last_name || "",
+      email: profile?.email || "",
+      role: profile?.role || "staff",
+      avatarUrl: profile?.avatar_url || null,
+      hireDate: row.hire_date,
+      isActive: row.is_active,
+      profileIsActive: profile?.is_active ?? true,
+    };
+  });
 }
 
 // --- All Profiles (for admin user search) ---
@@ -1087,4 +1115,19 @@ export async function getAllPurchaseRequests(): Promise<PurchaseRequest[]> {
 
   if (error || !data) return [];
   return (data as PurchaseRequestRow[]).map(mapPurchaseRequest);
+}
+
+
+// --- Countries ---
+
+export async function getCountries(): Promise<Array<{ id: number; name: string; code: string; region: string }>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("countries")
+    .select("id, name, code, region")
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error || !data) return [];
+  return data as Array<{ id: number; name: string; code: string; region: string }>;
 }

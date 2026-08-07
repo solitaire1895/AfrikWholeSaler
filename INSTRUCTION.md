@@ -81,7 +81,39 @@ After deploying, you need at least one admin user to access the `/admin` panel:
 
 ---
 
-## 7. Seed Initial Data (Optional but Recommended)
+## 7. Run Additional SQL Scripts
+
+Run these in the Supabase SQL Editor after `schema.sql`:
+
+### 7a. Countries Table (Recommended)
+1. Open `supabase/countries.sql` and run it.
+2. This creates a `countries` lookup table with ~100 countries across Africa, Europe, North America, South America, Asia, Middle East, and Oceania.
+
+### 7b. Seed Catalog Data (Recommended)
+1. Open `supabase/seed.sql` and run it.
+2. This inserts 8 categories, 17 sub-categories, and 8 products with full pricing tiers, specs, and images.
+
+### 7c. Demo Users (Optional — for testing)
+1. Open `supabase/seed_users.sql` and run it.
+2. This creates 11 demo users (8 customers + 3 staff) with auth accounts.
+3. **Password for all demo users:** `DemoPassword123!`
+4. Demo accounts:
+   - `admin@demo.com` — Super Admin
+   - `sales.rep@demo.com` — Sales Representative
+   - `support.agent@demo.com` — Customer Support Agent
+   - `amadou.diallo@demo.com` — Verified customer (Senegal)
+   - `fatima.okonkwo@demo.com` — Verified customer (Nigeria)
+   - `thomas.mueller@demo.com` — Customer (Germany)
+   - `carlos.silva@demo.com` — Customer (Brazil)
+   - `sarah.johnson@demo.com` — Customer (United States)
+
+### 7d. Purchase Requests Table (Required for PR module)
+1. Open `supabase/purchase_requests.sql` and run it.
+2. This creates the `purchase_requests` table for internal procurement tracking.
+
+---
+
+## 8. Seed Initial Data (See Step 7)
 
 For the app to display products and categories, you need to seed the database. You can either:
 

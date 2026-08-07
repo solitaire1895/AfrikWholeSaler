@@ -1,0 +1,275 @@
+================================================================================
+ OPTIMIZED SEARCH ENGINE ALGORITHM — PSEUDOCODE
+ Modern, fast, scalable full-text + faceted search for a web application
+================================================================================
+
+DESIGN GOALS
+  - Sub-100ms query latency at scale
+  - Relevance ranking via BM25 + business-logic boosts
+  - Typo tolerance, autocomplete, and faceted filtering
+  - Incremental (real-time) index updates, no full rebuilds
+  - Horizontally scalable (shardable), cache-friendly
+
+--------------------------------------------------------------------------------
+1. CORE DATA STRUCTURES
+--------------------------------------------------------------------------------
+
+STRUCT InvertedIndex:
+    postings: Map<Token, List<PostingEntry>>   # term -> documents containing it
+    documentStore: Map<DocID, DocumentMeta>    # doc metadata (title, price, etc.)
+    documentFrequency: Map<Token, Int>         # number of docs containing term
+    totalDocuments: Int
+    avgDocLength: Float
+
+STRUCT PostingEntry:
+    docID: ID
+    termFrequency: Int
+    positions: List<Int>       # word positions, for phrase search
+    fieldWeights: Map<Field, Float>  # e.g. title vs description
+
+STRUCT TrieNode:                # for autocomplete
+    children: Map<Char, TrieNode>
+    isEndOfWord: Boolean
+    topSuggestions: List<String>   # precomputed top-K completions (cached)
+
+GLOBAL:
+    invertedIndex   = new InvertedIndex()
+    autocompleteTrie = new TrieNode()
+    queryCache       = new LRUCache(capacity = 10_000, ttl = 5 min)
+    synonymDict      = loadSynonyms()   # e.g. "phone" <-> "mobile"
+    stopwords        = loadStopwordSet()
+
+
+--------------------------------------------------------------------------------
+2. INDEXING PIPELINE (runs on document create/update)
+--------------------------------------------------------------------------------
+
+FUNCTION indexDocument(doc):
+    tokens = tokenize(doc.text)                 # split on word boundaries
+    tokens = normalize(tokens)                  # lowercase, unicode fold
+    tokens = removeStopwords(tokens, stopwords)
+    tokens = stem(tokens)                        # e.g. Porter/Snowball stemmer
+
+    termPositions = buildPositionMap(tokens)
+
+    FOR EACH (term, positions) IN termPositions:
+        fieldWeight = computeFieldWeight(term, doc)  # title=3x, tags=2x, body=1x
+        entry = PostingEntry(doc.id, len(positions), positions, fieldWeight)
+        invertedIndex.postings[term].append(entry)
+        invertedIndex.documentFrequency[term] += 1
+
+    invertedIndex.documentStore[doc.id] = extractMeta(doc)
+    invertedIndex.totalDocuments += 1
+    updateAvgDocLength()
+
+    insertIntoTrie(autocompleteTrie, doc.title)   # for typeahead
+    invalidateCacheEntriesTouching(doc.id)        # keep cache consistent
+
+FUNCTION removeDocument(docID):
+    FOR EACH token IN invertedIndex.postings.keys():
+        removePostingEntry(token, docID)
+    invertedIndex.documentStore.remove(docID)
+    invertedIndex.totalDocuments -= 1
+    invalidateCacheEntriesTouching(docID)
+
+NOTE: Run indexDocument/removeDocument via an async job queue (e.g. BullMQ)
+      triggered by DB write hooks, so indexing never blocks the write path.
+
+
+--------------------------------------------------------------------------------
+3. QUERY PROCESSING PIPELINE
+--------------------------------------------------------------------------------
+
+FUNCTION search(rawQuery, filters, page, pageSize):
+
+    cacheKey = hash(rawQuery, filters, page, pageSize)
+    IF queryCache.has(cacheKey):
+        RETURN queryCache.get(cacheKey)
+
+    # --- 3.1 Parse & clean ---
+    query = trim(rawQuery)
+    IF query.isEmpty(): RETURN emptyResult()
+
+    tokens = tokenize(query)
+    tokens = normalize(tokens)
+    tokens = spellCorrect(tokens)            # fuzzy match against dictionary
+    tokens = expandSynonyms(tokens, synonymDict)
+    tokens = removeStopwords(tokens, stopwords)
+    tokens = stem(tokens)
+
+    IF tokens.isEmpty(): RETURN emptyResult()
+
+    # --- 3.2 Candidate retrieval ---
+    candidateDocIDs = retrieveCandidates(tokens)
+
+    # --- 3.3 Apply structured filters (facets) BEFORE full scoring ---
+    candidateDocIDs = applyFilters(candidateDocIDs, filters)
+    # e.g. category=Electronics, priceRange=[10,100], inStock=true
+
+    # --- 3.4 Score & rank ---
+    scoredResults = rankResults(tokens, candidateDocIDs)
+
+    # --- 3.5 Paginate ---
+    pageResults = paginate(scoredResults, page, pageSize)
+
+    result = assembleResponse(pageResults, computeFacetCounts(candidateDocIDs))
+    queryCache.set(cacheKey, result)
+    RETURN result
+
+
+FUNCTION spellCorrect(tokens):
+    FOR EACH token IN tokens:
+        IF token NOT IN vocabulary:
+            token = nearestMatch(token, vocabulary, maxEditDistance = 2)
+            # Use BK-tree or SymSpell for O(1)-ish fuzzy lookup instead of
+            # brute-force Levenshtein against the whole vocabulary
+    RETURN tokens
+
+
+FUNCTION retrieveCandidates(tokens):
+    # Union postings lists for OR semantics, intersect for required terms
+    postingLists = [invertedIndex.postings[t] FOR t IN tokens IF t IN invertedIndex.postings]
+    IF postingLists.isEmpty(): RETURN []
+
+    # Sort lists shortest-first for efficient intersection/union
+    sort postingLists BY length ASCENDING
+
+    RETURN unionOfDocIDs(postingLists)   # OR-match; AND-match = intersection
+
+
+--------------------------------------------------------------------------------
+4. RANKING ALGORITHM (BM25 + business signal boosting)
+--------------------------------------------------------------------------------
+
+CONSTANTS: k1 = 1.5, b = 0.75    # standard BM25 tuning params
+
+FUNCTION rankResults(queryTokens, docIDs):
+    scored = []
+
+    FOR EACH docID IN docIDs:
+        doc = invertedIndex.documentStore[docID]
+        bm25Score = 0.0
+
+        FOR EACH term IN queryTokens:
+            posting = getPosting(term, docID)
+            IF posting IS NULL: CONTINUE
+
+            df  = invertedIndex.documentFrequency[term]
+            idf = log( (invertedIndex.totalDocuments - df + 0.5) / (df + 0.5) + 1 )
+
+            tf = posting.termFrequency
+            docLen = doc.length
+            normTF = (tf * (k1 + 1)) /
+                     (tf + k1 * (1 - b + b * (docLen / invertedIndex.avgDocLength)))
+
+            fieldBoost = posting.fieldWeights.maxValue()   # title match > body match
+            bm25Score += idf * normTF * fieldBoost
+
+        # --- Business-logic boosts (multiplicative, tunable) ---
+        recencyBoost     = computeRecencyBoost(doc.updatedAt)      # freshness
+        popularityBoost  = log(1 + doc.viewCount + doc.purchaseCount * 3)
+        inStockBoost     = doc.inStock ? 1.15 : 0.85
+        exactPhraseBoost = containsExactPhrase(doc, queryTokens) ? 1.3 : 1.0
+        personalBoost    = computePersonalizationBoost(doc, currentUser)  # optional
+
+        finalScore = bm25Score
+                     * recencyBoost
+                     * (1 + popularityBoost * 0.1)
+                     * inStockBoost
+                     * exactPhraseBoost
+                     * personalBoost
+
+        scored.append((docID, finalScore))
+
+    sort scored BY finalScore DESCENDING
+    RETURN scored
+
+
+--------------------------------------------------------------------------------
+5. AUTOCOMPLETE / TYPEAHEAD
+--------------------------------------------------------------------------------
+
+FUNCTION autocomplete(prefix, limit = 8):
+    prefix = normalize(prefix)
+    node = autocompleteTrie
+    FOR EACH char IN prefix:
+        IF char NOT IN node.children: RETURN []
+        node = node.children[char]
+
+    # topSuggestions is precomputed per-node (updated async on index writes)
+    # so lookup here is O(prefix length), not O(subtree size)
+    RETURN node.topSuggestions[0 : limit]
+
+FUNCTION insertIntoTrie(root, phrase):
+    node = root
+    FOR EACH char IN normalize(phrase):
+        node = node.children.getOrCreate(char)
+    node.isEndOfWord = true
+    propagateSuggestionUpward(root, phrase)   # maintain top-K cache per prefix
+
+
+--------------------------------------------------------------------------------
+6. FACETED FILTERING
+--------------------------------------------------------------------------------
+
+FUNCTION applyFilters(docIDs, filters):
+    result = docIDs
+    FOR EACH (field, condition) IN filters:
+        result = result.filter(id ->
+            matchesCondition(invertedIndex.documentStore[id][field], condition))
+    RETURN result
+
+FUNCTION computeFacetCounts(docIDs):
+    # Aggregate counts per filterable field for UI facet widgets
+    counts = {}
+    FOR EACH docID IN docIDs:
+        doc = invertedIndex.documentStore[docID]
+        FOR EACH facetField IN FACETABLE_FIELDS:
+            counts[facetField][doc[facetField]] += 1
+    RETURN counts
+
+
+--------------------------------------------------------------------------------
+7. CACHING & PERFORMANCE STRATEGY
+--------------------------------------------------------------------------------
+
+  - LRU query-result cache (Redis), TTL 5 min, invalidated on writes
+  - Precompute & cache trie top-K suggestions (avoid recompute per keystroke)
+  - Shard invertedIndex by docID range or category for horizontal scale;
+    fan out queries to shards in parallel, merge-sort top-K from each
+  - Use skip-lists or Roaring Bitmaps for posting lists to speed up
+    intersection/union operations
+  - Debounce client-side keystrokes (150-250ms) before firing autocomplete
+  - Return partial results progressively (stream top-K first, refine async)
+
+
+--------------------------------------------------------------------------------
+8. REAL-TIME INDEX UPDATES
+--------------------------------------------------------------------------------
+
+ON documentCreated OR documentUpdated:
+    enqueue(indexJobQueue, {action: "index", doc})
+
+ON documentDeleted:
+    enqueue(indexJobQueue, {action: "remove", docID})
+
+WORKER (async, decoupled from request path):
+    job = indexJobQueue.pop()
+    IF job.action == "index": indexDocument(job.doc)
+    ELSE IF job.action == "remove": removeDocument(job.docID)
+
+
+--------------------------------------------------------------------------------
+9. COMPLEXITY SUMMARY
+--------------------------------------------------------------------------------
+
+  Indexing a document:        O(n)  where n = number of tokens
+  Query retrieval:             O(m log m)  where m = shortest posting list
+  BM25 ranking per doc:        O(t)  where t = number of query terms
+  Autocomplete lookup:         O(p)  where p = prefix length (cached suggestions)
+  Overall query (cached):      O(1)
+  Overall query (uncached):    O(m log m + k log k)  where k = candidate count
+
+================================================================================
+ END OF FILE
+================================================================================

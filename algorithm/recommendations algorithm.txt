@@ -1,0 +1,280 @@
+================================================================================
+ OPTIMIZED RECOMMENDATIONS ALGORITHM — PSEUDOCODE
+ Hybrid (collaborative + content-based) product recommendation engine
+================================================================================
+
+DESIGN GOALS
+  - Relevant, diverse recommendations even for new users/items (cold start)
+  - Real-time signal ingestion, near-real-time recommendation freshness
+  - Candidate-generation -> ranking funnel (cheap then expensive), for speed
+  - Explainable scoring (each boost is traceable) and business-tunable
+
+--------------------------------------------------------------------------------
+1. CORE DATA STRUCTURES
+--------------------------------------------------------------------------------
+
+STRUCT UserProfile:
+    userID: ID
+    interactionHistory: List<Interaction>      # recent-first, capped window
+    categoryAffinity: Map<Category, Float>     # decayed interest scores
+    embedding: Vector[D]                        # learned user embedding
+    lastUpdated: Timestamp
+
+STRUCT Interaction:
+    itemID: ID
+    type: Enum(VIEW, CART_ADD, WISHLIST, PURCHASE, RFQ_SENT, DISMISS)
+    weight: Float           # implicit-feedback strength, see section 2
+    timestamp: Timestamp
+
+STRUCT ItemProfile:
+    itemID: ID
+    embedding: Vector[D]                # content embedding (title+desc+category)
+    category: Category
+    supplierID: ID
+    priceTier: Enum
+    popularityScore: Float              # decayed global engagement
+    coPurchaseNeighbors: List<(ItemID, Float)>   # precomputed item-item similarity
+
+GLOBAL:
+    userProfiles       = Map<UserID, UserProfile>
+    itemProfiles        = Map<ItemID, ItemProfile>
+    itemSimilarityIndex = ApproximateNearestNeighborIndex(dim = D)   # e.g. HNSW
+    interactionStream    = eventQueue()          # Kafka/Redis stream
+    recommendationCache = LRUCache(capacity = 50_000, ttl = 15 min)
+
+
+--------------------------------------------------------------------------------
+2. SIGNAL COLLECTION & IMPLICIT FEEDBACK WEIGHTING
+--------------------------------------------------------------------------------
+
+CONST INTERACTION_WEIGHTS = {
+    VIEW:        1.0,
+    CART_ADD:    3.0,
+    WISHLIST:    2.5,
+    RFQ_SENT:    4.0,      # B2B-specific: request-for-quote is strong intent
+    PURCHASE:    5.0,
+    DISMISS:    -2.0       # explicit negative signal
+}
+
+FUNCTION recordInteraction(userID, itemID, type):
+    weight = INTERACTION_WEIGHTS[type]
+    event = Interaction(itemID, type, weight, now())
+    interactionStream.push(userID, event)     # async, non-blocking on request path
+
+WORKER onInteractionEvent(userID, event):
+    profile = userProfiles.getOrCreate(userID)
+    profile.interactionHistory.prepend(event)
+    profile.interactionHistory.truncate(maxLen = 500)
+
+    decayAndUpdateCategoryAffinity(profile, event)
+    updateUserEmbedding(profile, event)         # incremental online update
+    invalidateCache(userID)
+
+FUNCTION decayAndUpdateCategoryAffinity(profile, event):
+    item = itemProfiles[event.itemID]
+    FOR EACH (category, score) IN profile.categoryAffinity:
+        profile.categoryAffinity[category] = score * DECAY_FACTOR   # e.g. 0.98/day
+    profile.categoryAffinity[item.category] += event.weight
+
+
+--------------------------------------------------------------------------------
+3. CANDIDATE GENERATION (cheap, high-recall — pull ~500-1000 candidates)
+--------------------------------------------------------------------------------
+
+FUNCTION generateCandidates(userID):
+    profile = userProfiles.get(userID)
+    candidates = Set<ItemID>()
+
+    IF profile IS NULL OR profile.interactionHistory.isEmpty():
+        RETURN coldStartCandidates(userID)     # section 6
+
+    # --- 3.1 Collaborative: item-to-item co-engagement ---
+    FOR EACH interaction IN profile.interactionHistory[0:20]:   # recent items
+        neighbors = itemProfiles[interaction.itemID].coPurchaseNeighbors
+        candidates.addAll(topK(neighbors, k = 30))
+
+    # --- 3.2 Content-based: nearest neighbors in embedding space ---
+    similarByEmbedding = itemSimilarityIndex.query(profile.embedding, k = 100)
+    candidates.addAll(similarByEmbedding)
+
+    # --- 3.3 Category affinity: top categories, popular items within them ---
+    topCategories = topK(profile.categoryAffinity, k = 5)
+    FOR EACH category IN topCategories:
+        candidates.addAll(getTopPopularInCategory(category, k = 50))
+
+    # --- 3.4 Trending / global popularity (diversity injection) ---
+    candidates.addAll(getTrendingItems(k = 30))
+
+    # remove items already purchased/dismissed
+    candidates.removeAll(getExcludedItems(profile))
+
+    RETURN candidates
+
+
+--------------------------------------------------------------------------------
+4. RANKING (expensive, high-precision — score & sort candidates)
+--------------------------------------------------------------------------------
+
+FUNCTION rankCandidates(userID, candidates):
+    profile = userProfiles.get(userID)
+    scored = []
+
+    FOR EACH itemID IN candidates:
+        item = itemProfiles[itemID]
+
+        # --- Collaborative filtering signal ---
+        cfScore = matrixFactorizationScore(profile.embedding, item.embedding)
+        # dot product of learned latent factors (e.g. via ALS / BPR)
+
+        # --- Content similarity signal ---
+        contentScore = cosineSimilarity(profile.embedding, item.embedding)
+
+        # --- Category affinity signal ---
+        affinityScore = profile.categoryAffinity.getOrDefault(item.category, 0)
+
+        # --- Popularity prior (helps sparse users) ---
+        popularityScore = log(1 + item.popularityScore)
+
+        baseScore = (cfScore * 0.40)
+                  + (contentScore * 0.25)
+                  + (affinityScore * 0.20)
+                  + (popularityScore * 0.15)
+
+        # --- Business-logic boosts ---
+        recencyBoost   = computeRecencyBoost(item)
+        stockBoost     = item.inStock ? 1.2 : 0.6
+        marginBoost    = computeMarginWeighting(item)        # optional, business-tunable
+        supplierDiversityPenalty = diversityPenalty(itemID, scored)  # avoid single-supplier flooding
+
+        finalScore = baseScore
+                     * recencyBoost
+                     * stockBoost
+                     * marginBoost
+                     * supplierDiversityPenalty
+
+        scored.append((itemID, finalScore))
+
+    sort scored BY finalScore DESCENDING
+    RETURN scored
+
+
+FUNCTION diversityPenalty(itemID, alreadyScoredSoFar):
+    # Prevent the top-N from being dominated by one supplier/category
+    recentSuppliers = countBySupplier(alreadyScoredSoFar.last(10))
+    supplierID = itemProfiles[itemID].supplierID
+    IF recentSuppliers[supplierID] >= 3:
+        RETURN 0.7    # dampen repetitive results
+    RETURN 1.0
+
+
+--------------------------------------------------------------------------------
+5. RE-RANKING & RESPONSE ASSEMBLY (post-processing for UX quality)
+--------------------------------------------------------------------------------
+
+FUNCTION getRecommendations(userID, context, limit = 20):
+    cacheKey = hash(userID, context.page, context.slot)
+    IF recommendationCache.has(cacheKey):
+        RETURN recommendationCache.get(cacheKey)
+
+    candidates = generateCandidates(userID)
+    ranked     = rankCandidates(userID, candidates)
+
+    # --- Contextual re-ranking ---
+    IF context.page == "PRODUCT_DETAIL":
+        ranked = boostSimilarToCurrentItem(ranked, context.currentItemID)
+    IF context.page == "CART":
+        ranked = boostComplementaryItems(ranked, context.cartItemIDs)  # cross-sell
+
+    # --- Final diversity pass (Maximal Marginal Relevance style) ---
+    finalList = applyMMRDiversification(ranked, limit, lambdaParam = 0.75)
+
+    recommendationCache.set(cacheKey, finalList)
+    RETURN finalList
+
+
+FUNCTION applyMMRDiversification(ranked, limit, lambdaParam):
+    # Balances relevance vs. redundancy so results aren't near-duplicates
+    selected = []
+    remaining = ranked.copy()
+    WHILE len(selected) < limit AND remaining.notEmpty():
+        best = argmax(remaining, item ->
+            lambdaParam * item.score
+            - (1 - lambdaParam) * maxSimilarityTo(item, selected))
+        selected.append(best)
+        remaining.remove(best)
+    RETURN selected
+
+
+--------------------------------------------------------------------------------
+6. COLD-START HANDLING
+--------------------------------------------------------------------------------
+
+FUNCTION coldStartCandidates(userID):
+    # No interaction history yet
+    signals = []
+
+    IF userHasDeclaredCategory(userID):           # onboarding preferences
+        signals.addAll(getTopPopularInCategory(declaredCategory, k = 50))
+
+    signals.addAll(getTrendingItems(k = 50))
+    signals.addAll(getTopRatedItems(k = 30))
+    signals.addAll(getGeoRelevantItems(userLocation, k = 30))  # regional relevance
+
+    RETURN signals
+
+FUNCTION coldStartItem(itemID):
+    # New item with no interaction history yet
+    # Rely purely on content embedding similarity + category popularity floor
+    item = itemProfiles[itemID]
+    item.popularityScore = getCategoryAveragePopularity(item.category) * 0.5
+    itemSimilarityIndex.insert(itemID, item.embedding)
+
+
+--------------------------------------------------------------------------------
+7. OFFLINE MODEL TRAINING (batch job, e.g. nightly/hourly)
+--------------------------------------------------------------------------------
+
+FUNCTION trainMatrixFactorizationModel():
+    interactionMatrix = buildSparseUserItemMatrix(allInteractions)
+    (userFactors, itemFactors) = ALS.fit(interactionMatrix,
+                                          latentDims = D,
+                                          regularization = 0.05,
+                                          iterations = 15)
+    FOR EACH userID IN userFactors: userProfiles[userID].embedding = userFactors[userID]
+    FOR EACH itemID IN itemFactors: itemProfiles[itemID].embedding = itemFactors[itemID]
+
+    rebuildItemSimilarityIndex(itemProfiles)     # refresh ANN index
+    recomputeCoPurchaseNeighbors(allInteractions)  # item-item co-occurrence
+
+NOTE: Embedding updates in section 2 (updateUserEmbedding) are lightweight
+      online nudges between batch retrains — keeps recs fresh without
+      needing a full retrain on every click.
+
+
+--------------------------------------------------------------------------------
+8. CACHING & PERFORMANCE STRATEGY
+--------------------------------------------------------------------------------
+
+  - Precompute coPurchaseNeighbors and trending lists on a schedule (cron)
+  - ANN index (HNSW/FAISS) for O(log n) nearest-neighbor lookup, not O(n)
+  - Cache final recommendation lists per (user, page, slot) with short TTL
+  - Invalidate only the affected user's cache on new interaction (not global)
+  - Candidate generation and ranking run in parallel across signal sources
+  - Serve stale-while-revalidate: return cached list instantly, refresh async
+
+
+--------------------------------------------------------------------------------
+9. COMPLEXITY SUMMARY
+--------------------------------------------------------------------------------
+
+  Interaction ingestion:        O(1) amortized (async stream write)
+  Candidate generation:         O(k log n)  where k = seed items, n = catalog size (ANN)
+  Ranking N candidates:         O(N)  (N ~ 500-1000, cheap dot products)
+  MMR diversification:          O(limit * N)  (small limit, e.g. 20)
+  Offline training (ALS):       O(iterations * nonzeros * D)  batch, not on request path
+  Overall request (cached):     O(1)
+  Overall request (uncached):   O(k log n + N)
+
+================================================================================
+ END OF FILE
+================================================================================

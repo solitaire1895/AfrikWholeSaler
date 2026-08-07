@@ -18,9 +18,12 @@ import { cn } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 import { categories } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
+import { useCurrency } from "@/lib/currency-context";
+import { SearchBar } from "@/components/search/search-bar";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 export function Navbar() {
+  const { currency, currencies, setCurrency } = useCurrency();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaMenuOpen, setMegaMenuOpen] = useState(false);
@@ -102,14 +105,7 @@ export function Navbar() {
 
         {/* Center Search (desktop) */}
         <div className="hidden md:flex flex-1 max-w-md mx-4">
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
-            <input
-              type="text"
-              placeholder="Search products, categories..."
-              className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface/80 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 transition-all"
-            />
-          </div>
+          <SearchBar className="w-full" />
         </div>
 
         {/* Desktop Nav Links */}

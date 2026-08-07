@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { formatPrice, cn } from "@/lib/utils";
+import { useCurrency } from "@/lib/currency-context";
 import type { Product, PriceTier } from "@/types";
 
 export function ProductDetail({
@@ -37,6 +38,7 @@ export function ProductDetail({
 }) {
   const [quantity, setQuantity] = useState(product.moq ?? 100);
   const [destination, setDestination] = useState("Senegal");
+  const { formatPrice: formatCurrencyPrice } = useCurrency();
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
   const destinations = [
@@ -224,7 +226,7 @@ export function ProductDetail({
                         </div>
                         <div className="text-right">
                           <span className="text-sm font-bold text-navy">
-                            {formatPrice(tier.price, tier.currency)}
+                            {formatCurrencyPrice(tier.price)}
                           </span>
                           <span className="text-xs text-text-secondary ml-1">
                             /unit
@@ -300,13 +302,13 @@ export function ProductDetail({
                       Unit Price ({applicableTier?.minQuantity}+ tier)
                     </span>
                     <span className="font-medium text-text-primary">
-                      {formatPrice(unitPrice)}
+                      {formatCurrencyPrice(unitPrice)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-text-secondary">Product Total</span>
                     <span className="font-medium text-text-primary">
-                      {formatPrice(totalPrice)}
+                      {formatCurrencyPrice(totalPrice)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -314,7 +316,7 @@ export function ProductDetail({
                       Shipping (est.)
                     </span>
                     <span className="font-medium text-text-primary">
-                      {formatPrice(shippingCost)}
+                      {formatCurrencyPrice(shippingCost)}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
@@ -322,7 +324,7 @@ export function ProductDetail({
                       Import Tax (est.)
                     </span>
                     <span className="font-medium text-text-primary">
-                      {formatPrice(importTax)}
+                      {formatCurrencyPrice(importTax)}
                     </span>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-border">
@@ -330,13 +332,13 @@ export function ProductDetail({
                       Landed Cost Total
                     </span>
                     <span className="font-bold text-brand text-lg">
-                      {formatPrice(landedCost)}
+                      {formatCurrencyPrice(landedCost)}
                     </span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-text-disabled">Per unit (landed)</span>
                     <span className="text-text-secondary font-medium">
-                      {formatPrice(landedCostPerUnit)}
+                      {formatCurrencyPrice(landedCostPerUnit)}
                     </span>
                   </div>
                 </div>
@@ -476,7 +478,7 @@ export function ProductDetail({
                       Shipping (per unit)
                     </p>
                     <p className="text-sm text-text-secondary">
-                      ~{formatPrice(product.shippingEstimate)} estimated
+                      ~{formatCurrencyPrice(product.shippingEstimate)} estimated
                     </p>
                   </div>
                 </div>
@@ -487,7 +489,7 @@ export function ProductDetail({
                       Import Tax (per unit)
                     </p>
                     <p className="text-sm text-text-secondary">
-                      ~{formatPrice(product.importTaxEstimate)} estimated
+                      ~{formatCurrencyPrice(product.importTaxEstimate)} estimated
                     </p>
                   </div>
                 </div>
@@ -569,7 +571,7 @@ export function ProductDetail({
                           {rp.name}
                         </h3>
                         <p className="mt-2 text-sm font-bold text-navy">
-                          {formatPrice(rp.priceTiers[0]?.price ?? 0)}
+                          {formatCurrencyPrice(rp.priceTiers[0]?.price ?? 0)}
                           <span className="text-xs font-normal text-text-secondary ml-1">
                             /unit
                           </span>
