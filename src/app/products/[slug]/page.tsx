@@ -1,10 +1,20 @@
 import { cache } from "react";
+import { permanentRedirect } from "next/navigation";
+import { isCleanSlug, slugify } from "@/lib/slug";
 import type { Metadata } from "next";
 import { getProductBySlug, getRelatedProducts } from "@/lib/queries";
 import { ProductDetail, ProductNotFound } from "@/components/products/product-detail";
 import { getLocale } from "@/i18n/server";
 import { absoluteUrl, languageAlternates } from "@/i18n/seo";
 import type { Product } from "@/types";
+
+function safeDecode(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
 
 // One database read per request, shared by the metadata and the page.
 const loadProduct = cache((slug: string) => getProductBySlug(slug));
@@ -84,6 +94,14 @@ export default async function ProductDetailPage({
   const product = await loadProduct(slug);
 
   if (!product) {
+    // A link from before slugs were cleaned ("joker-1-“lapis-blue”-(eu-36–40)")
+    // goes to the product's current URL, keeping ?ref= affiliate codes.
+    const decoded = safeDecode(slug);
+    const clean = slugify(decoded);
+    if (clean && clean !== slug && !isCleanSlug(decoded) && (await loadProduct(clean))) {
+      const query = new URLSearchParams({ ...(chat ? { chat } : {}), ...(ref ? { ref } : {}) }).toString();
+      permanentRedirect(`/products/${clean}${query ? `?${query}` : ""}`);
+    }
     return <ProductNotFound />;
   }
 

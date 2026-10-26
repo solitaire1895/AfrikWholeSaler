@@ -2,6 +2,20 @@
 
 import { rateLimit } from "@/lib/rate-limit";
 import { detectImage, detectVideo } from "@/lib/file-signature";
+import { slugify } from "@/lib/slug";
+
+/** URL-safe product slug, made unique ("men-hoodie", "men-hoodie-2"…). */
+async function uniqueProductSlug(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  wanted: string,
+  excludeId?: string
+): Promise<string> {
+  const base = slugify(wanted) || "product";
+  const { data } = await supabase.from("products").select("id, slug").like("slug", `${base}%`);
+  const taken = new Set((data ?? []).filter((p) => p.id !== excludeId).map((p) => p.slug as string));
+  if (!taken.has(base)) return base;
+  for (let n = 2; ; n++) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`;
+}
 import { te } from "@/i18n/errors";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -339,11 +353,12 @@ export async function createProduct(input: {
     return { success: false, error: await te("Only admins can create products.") };
   }
 
+  const slug = await uniqueProductSlug(supabase, input.slug || input.name);
   const { data, error } = await supabase
     .from("products")
     .insert({
       name: input.name,
-      slug: input.slug,
+      slug,
       description: input.description,
       category: input.category,
       category_slug: input.categorySlug,
@@ -395,7 +410,7 @@ export async function updateProduct(productId: string, input: Record<string, unk
   // Map camelCase input keys to snake_case DB columns
   const updateData: Record<string, unknown> = {};
   if (input.name !== undefined) updateData.name = input.name;
-  if (input.slug !== undefined) updateData.slug = input.slug;
+  if (input.slug !== undefined) updateData.slug = await uniqueProductSlug(supabase, String(input.slug || input.name || ""), productId);
   if (input.description !== undefined) updateData.description = input.description;
   if (input.category !== undefined) updateData.category = input.category;
   if (input.categorySlug !== undefined) updateData.category_slug = input.categorySlug;

@@ -28,6 +28,7 @@ import {
 } from "@/app/actions/crud";
 import type { Product, Category, SubCategory, PriceTier } from "@/types";
 import { uploadProductImage, uploadProductVideoFile, type MediaResult } from "@/lib/product-media";
+import { slugify } from "@/lib/slug";
 import { useI18n } from "@/i18n/client";
 import { categoryName, subCategoryName } from "@/i18n/names";
 
@@ -304,7 +305,7 @@ export function ProductsManager({
 
       const input = {
         name: formData.get("name") as string,
-        slug: formData.get("slug") as string || (formData.get("name") as string).toLowerCase().replace(/\s+/g, "-"),
+        slug: slugify((formData.get("slug") as string) || (formData.get("name") as string)),
         description: formData.get("description") as string,
         category: categoryName,
         categorySlug: categoryObj?.slug || "",

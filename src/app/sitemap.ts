@@ -38,10 +38,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...STATIC_PAGES.map((p) => entry(p.path, { priority: p.priority, changeFrequency: p.changeFrequency })),
     ...(categories ?? []).map((c) =>
-      entry(`/categories/${c.slug}`, { lastModified: c.updated_at ?? undefined, changeFrequency: "weekly", priority: 0.7 })
+      entry(`/categories/${encodeURIComponent(c.slug)}`, { lastModified: c.updated_at ?? undefined, changeFrequency: "weekly", priority: 0.7 })
     ),
     ...(products ?? []).map((p) =>
-      entry(`/products/${p.slug}`, {
+      entry(`/products/${encodeURIComponent(p.slug)}`, {
         lastModified: p.updated_at ?? undefined,
         changeFrequency: "weekly",
         priority: 0.8,
