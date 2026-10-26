@@ -1,5 +1,8 @@
+"use client";
+
 import { cn } from "@/lib/utils";
 import type { ProductBadge } from "@/types";
+import { useT } from "@/i18n/client";
 
 const badgeStyles: Record<ProductBadge, string> = {
   New: "bg-info/10 text-info border-info/20",
@@ -18,6 +21,7 @@ interface BadgeProps {
 }
 
 export function Badge({ badge, className }: BadgeProps) {
+  const t = useT();
   return (
     <span
       className={cn(
@@ -26,7 +30,7 @@ export function Badge({ badge, className }: BadgeProps) {
         className
       )}
     >
-      {badge}
+      {(t.catalog.badges as Record<string, string>)[badge] ?? badge}
     </span>
   );
 }

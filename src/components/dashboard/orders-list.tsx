@@ -12,11 +12,19 @@ import {
   FileText,
   Truck,
   Package,
+  CreditCard,
+  Clock,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
+import { useFormStatus } from "react-dom";
+import { payOrder } from "@/app/actions/payments";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { formatPrice, cn } from "@/lib/utils";
+import { balanceDue, canPayDeposit, depositAmount } from "@/lib/deposit";
 import type { Order, OrderStatus } from "@/types";
+import { useI18n } from "@/i18n/client";
 
 const statusColors: Record<OrderStatus, string> = {
   Pending: "bg-warning/10 text-warning border-warning/20",
@@ -40,7 +48,40 @@ const statusFilters: (OrderStatus | "All")[] = [
   "Delivered",
 ];
 
-export function OrdersList({ orders }: { orders: Order[] }) {
+function PayButton({ failed, label, secondary }: { failed?: boolean; label?: string; secondary?: boolean }) {
+  const { pending } = useFormStatus();
+  const { t } = useI18n();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className={cn(
+        "flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] px-4 text-xs font-semibold transition-colors disabled:opacity-60",
+        secondary ? "border border-border text-navy hover:bg-surface-secondary" : "bg-brand text-white hover:bg-brand-hover"
+      )}
+    >
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <CreditCard className="h-3.5 w-3.5" />
+      )}
+      {label ?? (failed ? t.account.orders.retryPayment : t.account.orders.payButton)}
+    </button>
+  );
+}
+
+export function OrdersList({
+  orders,
+  placed,
+  paidWithWallet,
+}: {
+  orders: Order[];
+  placed?: string;
+  paidWithWallet?: boolean;
+}) {
+  const { t, format, formatDate } = useI18n();
+  const O = t.account.orders;
+  const orderStatus = (s: string) => (t.status.order as Record<string, string>)[s] ?? s;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "All">("All");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
@@ -71,19 +112,33 @@ export function OrdersList({ orders }: { orders: Order[] }) {
 
   return (
     <div className="space-y-6">
+      {placed && (
+        <div
+          role="status"
+          className="flex animate-[fade-in-up_0.5s_ease-out] items-start gap-3 rounded-[var(--radius-lg)] border border-success/20 bg-success/10 p-4"
+        >
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+          <div className="text-sm">
+            <p className="font-semibold text-navy">{format(O.placedTitle, { order: placed })}</p>
+            <p className="mt-0.5 text-text-secondary">
+              {paidWithWallet ? O.paidWithWallet : O.payNow}
+            </p>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy tracking-tight">
-            My Orders
+            {O.title}
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Track and manage all your orders.
+            {O.lead}
           </p>
         </div>
         <ButtonLink href="/products" variant="secondary" size="md">
           <Package className="h-4 w-4" />
-          Browse Products
+          {O.browse}
         </ButtonLink>
       </div>
 
@@ -93,7 +148,7 @@ export function OrdersList({ orders }: { orders: Order[] }) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
           <input
             type="text"
-            placeholder="Search by order number or product..."
+            placeholder={O.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 transition-all"
@@ -106,7 +161,7 @@ export function OrdersList({ orders }: { orders: Order[] }) {
         >
           {statusFilters.map((s) => (
             <option key={s} value={s}>
-              {s === "All" ? "All Statuses" : s}
+              {s === "All" ? O.allStatuses : orderStatus(s)}
             </option>
           ))}
         </select>
@@ -152,15 +207,15 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                           statusColors[order.status]
                         )}
                       >
-                        {order.status}
+                        {orderStatus(order.status)}
                       </span>
                     </div>
                     <p className="text-sm text-text-secondary truncate">
-                      {order.items.length}{" "}
-                      {order.items.length === 1 ? "item" : "items"} ·{" "}
-                      {order.items[0]?.productName}
-                      {order.items.length > 1 &&
-                        ` +${order.items.length - 1} more`}
+                      {format(order.items.length === 1 ? O.itemLine : O.itemsLine, {
+                        n: order.items.length,
+                        name: order.items[0]?.productName ?? "",
+                      })}
+                      {order.items.length > 1 && format(O.more, { n: order.items.length - 1 })}
                     </p>
                   </div>
                   <div className="text-right shrink-0 hidden sm:block">
@@ -168,11 +223,7 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                       {formatPrice(order.totalAmount, order.currency)}
                     </p>
                     <p className="text-xs text-text-secondary">
-                      {new Date(order.createdAt).toLocaleDateString("en-US", {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {formatDate(order.createdAt)}
                     </p>
                   </div>
                   {isExpanded ? (
@@ -188,7 +239,7 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                     {/* Items */}
                     <div className="space-y-3">
                       <h4 className="text-xs font-semibold text-text-disabled uppercase tracking-wide">
-                        Items
+                        {O.items}
                       </h4>
                       {order.items.map((item, idx) => (
                         <div
@@ -215,7 +266,7 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                               {item.productName}
                             </p>
                             <p className="text-xs text-text-secondary">
-                              {item.quantity} units × {formatPrice(item.unitPrice)}
+                              {format(O.unitsTimes, { n: item.quantity, price: formatPrice(item.unitPrice) })}
                             </p>
                           </div>
                           <p className="text-sm font-semibold text-navy shrink-0">
@@ -229,43 +280,79 @@ export function OrdersList({ orders }: { orders: Order[] }) {
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between pt-3 border-t border-border">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 text-sm">
-                          <span className="text-text-secondary">Order Total:</span>
+                          <span className="text-text-secondary">{O.orderTotal}</span>
                           <span className="font-bold text-navy">
                             {formatPrice(order.totalAmount, order.currency)}
                           </span>
                         </div>
                         <p className="text-xs text-text-secondary">
-                          Placed on{" "}
-                          {new Date(order.createdAt).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}
+                          {format(O.placedOn, { date: formatDate(order.createdAt, { year: "numeric", month: "long", day: "numeric" }) })}
                         </p>
                       </div>
-                      <div className="flex gap-2">
-                        <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
-                          <Download className="h-3.5 w-3.5" />
-                          Invoice
-                        </button>
-                        {order.status === "Shipped" ||
-                        order.status === "In Customs" ? (
-                          <Link
-                            href="/dashboard/shipments"
-                            className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-hover transition-colors"
+                      <div className="flex flex-wrap gap-2">
+                        {order.paymentStatus === "paid" ? (
+                          <span className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-success/10 px-4 text-xs font-semibold text-success">
+                            <CreditCard className="h-3.5 w-3.5" />
+                            {O.paid}
+                          </span>
+                        ) : order.awaitingPrice ? (
+                          <span
+                            title={O.awaitingPriceHint}
+                            className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-gold-light px-4 text-xs font-semibold text-navy"
                           >
-                            <Truck className="h-3.5 w-3.5" />
-                            Track Shipment
-                          </Link>
+                            <Clock className="h-3.5 w-3.5 text-gold" />
+                            {O.awaitingPrice}
+                          </span>
                         ) : (
-                          <Link
-                            href="/dashboard/messages"
-                            className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            Contact Support
-                          </Link>
+                          order.status !== "Cancelled" &&
+                          (canPayDeposit(order) ? (
+                            // Big order: 30% now, or everything at once.
+                            <>
+                              <form action={payOrder.bind(null, order.id, "deposit")}>
+                                <PayButton label={format(O.payDeposit, { amount: formatPrice(depositAmount(order), order.currency) })} />
+                              </form>
+                              <form action={payOrder.bind(null, order.id, "full")}>
+                                <PayButton secondary label={O.payFull} />
+                              </form>
+                            </>
+                          ) : (order.amountPaid ?? 0) > 0 ? (
+                            // Deposit paid: the balance is due before shipping.
+                            <>
+                              <span className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-success/10 px-4 text-xs font-semibold text-success">
+                                <CreditCard className="h-3.5 w-3.5" />
+                                {O.depositPaid}
+                              </span>
+                              <form action={payOrder.bind(null, order.id, "full")}>
+                                <PayButton label={format(O.payBalance, { amount: formatPrice(balanceDue(order), order.currency) })} />
+                              </form>
+                            </>
+                          ) : (
+                            <form action={payOrder.bind(null, order.id, "full")}>
+                              <PayButton failed={order.paymentStatus === "failed"} />
+                            </form>
+                          ))
                         )}
+                        <a
+                          href={`/api/invoices/${order.id}?download=1`}
+                          className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          {order.paymentStatus === "paid" ? O.invoice : O.proforma}
+                        </a>
+                        <Link
+                          href={`/dashboard/orders/${order.id}`}
+                          className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-hover transition-colors"
+                        >
+                          <Truck className="h-3.5 w-3.5" />
+                          {O.track}
+                        </Link>
+                        <Link
+                          href="/dashboard/messages"
+                          className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          {O.support}
+                        </Link>
                       </div>
                     </div>
                   </div>
@@ -279,14 +366,14 @@ export function OrdersList({ orders }: { orders: Order[] }) {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mx-auto mb-4">
             <ShoppingBag className="h-8 w-8 text-text-disabled" />
           </div>
-          <h3 className="text-lg font-semibold text-navy mb-1">No orders found</h3>
+          <h3 className="text-lg font-semibold text-navy mb-1">{O.emptyTitle}</h3>
           <p className="text-text-secondary text-sm mb-4">
             {search || statusFilter !== "All"
-              ? "Try adjusting your search or filters."
-              : "Start by browsing our catalog or requesting a quote."}
+              ? O.emptyFiltered
+              : O.emptyText}
           </p>
           <ButtonLink href="/products" variant="primary" size="md">
-            Browse Products
+            {O.browse}
           </ButtonLink>
         </Card>
       )}

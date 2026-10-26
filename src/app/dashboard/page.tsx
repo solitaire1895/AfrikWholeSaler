@@ -22,6 +22,7 @@ import {
 } from "@/lib/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import type { OrderStatus } from "@/types";
+import { getI18n } from "@/i18n/server";
 
 const statusColors: Record<OrderStatus, string> = {
   Pending: "bg-warning/10 text-warning border-warning/20",
@@ -37,6 +38,10 @@ const statusColors: Record<OrderStatus, string> = {
 export default async function DashboardOverviewPage() {
   const customer = await getCurrentCustomer();
   if (!customer) return null;
+  const { t, format, formatDate } = await getI18n();
+  const O = t.account.overview;
+  const orderStatus = (s: string) => (t.status.order as Record<string, string>)[s] ?? s;
+  const verification = (s: string) => (t.account.verification as Record<string, string>)[s] ?? s;
 
   const [orders, shipments, quoteRequests, conversations] = await Promise.all([
     getOrdersByCustomer(customer.id),
@@ -65,28 +70,28 @@ export default async function DashboardOverviewPage() {
 
   const stats = [
     {
-      label: "Active Orders",
+      label: O.activeOrders,
       value: activeOrders.length,
       icon: ShoppingBag,
       color: "text-brand",
       bg: "bg-brand-light",
     },
     {
-      label: "In Transit",
+      label: O.inTransit,
       value: activeShipments.length,
       icon: Truck,
       color: "text-info",
       bg: "bg-info/10",
     },
     {
-      label: "Pending Quotes",
+      label: O.pendingQuotes,
       value: pendingQuotes.length,
       icon: FileText,
       color: "text-gold",
       bg: "bg-gold-light",
     },
     {
-      label: "Unread Messages",
+      label: O.unreadMessages,
       value: unreadMessages,
       icon: MessageCircle,
       color: "text-navy",
@@ -107,15 +112,15 @@ export default async function DashboardOverviewPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy tracking-tight">
-            Welcome back, {customer.firstName}!
+            {format(O.welcome, { name: customer.firstName })}
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Here's an overview of your sourcing activity.
+            {O.lead}
           </p>
         </div>
         <ButtonLink href="/quote" variant="primary" size="md">
           <FileText className="h-4 w-4" />
-          Request a Quote
+          {O.requestQuote}
         </ButtonLink>
       </div>
 
@@ -144,13 +149,13 @@ export default async function DashboardOverviewPage() {
         <Card className="p-5 lg:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <DollarSign className="h-5 w-5 text-success" />
-            <h3 className="text-sm font-semibold text-navy">Total Spent</h3>
+            <h3 className="text-sm font-semibold text-navy">{O.totalSpent}</h3>
           </div>
           <p className="text-3xl font-bold text-navy">
             {formatPrice(totalSpent)}
           </p>
           <p className="text-xs text-text-secondary mt-1">
-            Across {orders.length} orders
+            {format(O.acrossOrders, { n: orders.length })}
           </p>
         </Card>
 
@@ -158,33 +163,29 @@ export default async function DashboardOverviewPage() {
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle className="h-5 w-5 text-success" />
             <h3 className="text-sm font-semibold text-navy">
-              Account Status
+              {O.accountStatus}
             </h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
-              {customer.verificationStatus}
+              {verification(customer.verificationStatus)}
             </span>
           </div>
           <p className="text-xs text-text-secondary mt-2">
-            Member since{" "}
-            {new Date(customer.createdAt).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-            })}
+            {format(O.memberSince, { date: formatDate(customer.createdAt, { year: "numeric", month: "long" }) })}
           </p>
         </Card>
 
         <Card className="p-5 lg:col-span-1">
           <div className="flex items-center gap-2 mb-3">
             <TrendingUp className="h-5 w-5 text-brand" />
-            <h3 className="text-sm font-semibold text-navy">Delivered Orders</h3>
+            <h3 className="text-sm font-semibold text-navy">{O.delivered}</h3>
           </div>
           <p className="text-3xl font-bold text-navy">
             {deliveredOrders.length}
           </p>
           <p className="text-xs text-text-secondary mt-1">
-            Successfully completed
+            {O.completed}
           </p>
         </Card>
       </div>
@@ -192,12 +193,12 @@ export default async function DashboardOverviewPage() {
       {/* Recent Orders */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-navy">Recent Orders</h2>
+          <h2 className="text-lg font-bold text-navy">{O.recentOrders}</h2>
           <Link
             href="/dashboard/orders"
             className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover"
           >
-            View all
+            {O.viewAll}
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
@@ -232,14 +233,15 @@ export default async function DashboardOverviewPage() {
                           statusColors[order.status]
                         )}
                       >
-                        {order.status}
+                        {orderStatus(order.status)}
                       </span>
                     </div>
                     <p className="text-sm text-text-secondary truncate">
-                      {order.items.length}{" "}
-                      {order.items.length === 1 ? "item" : "items"} ·{" "}
-                      {order.items[0]?.productName}
-                      {order.items.length > 1 && ` +${order.items.length - 1} more`}
+                      {format(order.items.length === 1 ? O.itemLine : O.itemsLine, {
+                        n: order.items.length,
+                        name: order.items[0]?.productName ?? "",
+                      })}
+                      {order.items.length > 1 && format(O.more, { n: order.items.length - 1 })}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
@@ -247,10 +249,7 @@ export default async function DashboardOverviewPage() {
                       {formatPrice(order.totalAmount, order.currency)}
                     </p>
                     <p className="text-xs text-text-secondary">
-                      {new Date(order.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      })}
+                      {formatDate(order.createdAt, { month: "short", day: "numeric" })}
                     </p>
                   </div>
                 </div>
@@ -260,7 +259,7 @@ export default async function DashboardOverviewPage() {
             <Card className="p-8 text-center">
               <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
               <p className="text-sm text-text-secondary">
-                No orders yet. Start by browsing products or requesting a quote.
+                {O.noOrders}
               </p>
             </Card>
           )}
@@ -272,12 +271,12 @@ export default async function DashboardOverviewPage() {
         {/* Active Shipments */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-navy">Active Shipments</h2>
+            <h2 className="text-lg font-bold text-navy">{O.activeShipments}</h2>
             <Link
               href="/dashboard/shipments"
               className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover"
             >
-              View all
+              {O.viewAll}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -303,7 +302,7 @@ export default async function DashboardOverviewPage() {
                         </p>
                       </div>
                       <span className="text-xs font-medium text-text-secondary">
-                        Est. {shipment.estimatedDelivery}
+                        {format(O.estimated, { date: shipment.estimatedDelivery })}
                       </span>
                     </div>
                     {/* Progress bar */}
@@ -315,7 +314,7 @@ export default async function DashboardOverviewPage() {
                     </div>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-xs text-text-secondary">
-                        {completedCount}/{shipment.milestones.length} milestones
+                        {format(O.milestones, { done: completedCount, total: shipment.milestones.length })}
                       </span>
                       <span className="text-xs font-medium text-brand">
                         {progress}%
@@ -328,7 +327,7 @@ export default async function DashboardOverviewPage() {
               <Card className="p-8 text-center">
                 <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
                 <p className="text-sm text-text-secondary">
-                  No active shipments. Your delivered shipments will appear here.
+                  {O.noShipments}
                 </p>
               </Card>
             )}
@@ -337,7 +336,7 @@ export default async function DashboardOverviewPage() {
 
         {/* Quick Actions */}
         <div>
-          <h2 className="text-lg font-bold text-navy mb-4">Quick Actions</h2>
+          <h2 className="text-lg font-bold text-navy mb-4">{O.quickActions}</h2>
           <div className="grid grid-cols-2 gap-3">
             <Link
               href="/products"
@@ -347,10 +346,10 @@ export default async function DashboardOverviewPage() {
                 <Package className="h-5 w-5" />
               </div>
               <p className="text-sm font-semibold text-text-primary group-hover:text-brand">
-                Browse Products
+                {O.qaBrowse}
               </p>
               <p className="text-xs text-text-secondary">
-                Explore our catalog
+                {O.qaBrowseText}
               </p>
             </Link>
             <Link
@@ -361,10 +360,10 @@ export default async function DashboardOverviewPage() {
                 <FileText className="h-5 w-5" />
               </div>
               <p className="text-sm font-semibold text-text-primary group-hover:text-brand">
-                Request Quote
+                {O.qaQuote}
               </p>
               <p className="text-xs text-text-secondary">
-                Get custom pricing
+                {O.qaQuoteText}
               </p>
             </Link>
             <Link
@@ -375,10 +374,10 @@ export default async function DashboardOverviewPage() {
                 <MessageCircle className="h-5 w-5" />
               </div>
               <p className="text-sm font-semibold text-text-primary group-hover:text-brand">
-                Messages
+                {O.qaMessages}
               </p>
               <p className="text-xs text-text-secondary">
-                {unreadMessages > 0 ? `${unreadMessages} unread` : "Chat with us"}
+                {unreadMessages > 0 ? format(O.qaUnread, { n: unreadMessages }) : O.qaChat}
               </p>
             </Link>
             <Link
@@ -389,10 +388,10 @@ export default async function DashboardOverviewPage() {
                 <CheckCircle className="h-5 w-5" />
               </div>
               <p className="text-sm font-semibold text-text-primary group-hover:text-brand">
-                Profile
+                {O.qaProfile}
               </p>
               <p className="text-xs text-text-secondary">
-                Manage account
+                {O.qaProfileText}
               </p>
             </Link>
           </div>

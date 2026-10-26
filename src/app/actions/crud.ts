@@ -1,5 +1,8 @@
 "use server";
 
+import { rateLimit } from "@/lib/rate-limit";
+import { detectImage, detectVideo } from "@/lib/file-signature";
+import { te } from "@/i18n/errors";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -28,7 +31,8 @@ export async function createQuoteRequest(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "You must be logged in to submit a quote request." };
+  if (!user) return { success: false, error: await te("You must be logged in to submit a quote request.") };
+  if (!(await rateLimit(`quote:${user.id}`, 20, 3600))) return { success: false, error: await te("Too many requests. Please wait a moment and try again.") };
 
   const { data: customer } = await supabase
     .from("customers")
@@ -65,7 +69,7 @@ export async function createQuoteRequest(input: {
 export async function updateQuoteStatus(quoteId: string, status: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data, error } = await supabase
     .from("quote_requests")
@@ -89,7 +93,7 @@ export async function respondToQuote(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data, error } = await supabase
     .from("quote_requests")
@@ -121,7 +125,7 @@ export async function createConversation(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "You must be logged in to start a conversation." };
+  if (!user) return { success: false, error: await te("You must be logged in to start a conversation.") };
 
   const { data, error } = await supabase
     .from("conversations")
@@ -151,7 +155,8 @@ export async function sendMessage(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "You must be logged in to send a message." };
+  if (!user) return { success: false, error: await te("You must be logged in to send a message.") };
+  if (!(await rateLimit(`msg:${user.id}`, 30, 60))) return { success: false, error: await te("Too many requests. Please wait a moment and try again.") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -190,7 +195,7 @@ export async function sendMessage(input: {
 export async function markMessagesRead(conversationId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { error } = await supabase
     .from("messages")
@@ -209,7 +214,7 @@ export async function markMessagesRead(conversationId: string): Promise<ActionRe
 export async function assignConversation(conversationId: string, agentId: string | null): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -218,7 +223,7 @@ export async function assignConversation(conversationId: string, agentId: string
     .single();
 
   if (!profile || !["admin", "super_admin", "sales_rep", "support_agent", "operations_manager"].includes(profile.role)) {
-    return { success: false, error: "Only staff can assign conversations." };
+    return { success: false, error: await te("Only staff can assign conversations.") };
   }
 
   const { data, error } = await supabase
@@ -238,7 +243,7 @@ export async function assignConversation(conversationId: string, agentId: string
 export async function updateConversationStatus(conversationId: string, status: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -247,7 +252,7 @@ export async function updateConversationStatus(conversationId: string, status: s
     .single();
 
   if (!profile || !["admin", "super_admin", "sales_rep", "support_agent", "operations_manager"].includes(profile.role)) {
-    return { success: false, error: "Only staff can update conversation status." };
+    return { success: false, error: await te("Only staff can update conversation status.") };
   }
 
   const { data, error } = await supabase
@@ -267,7 +272,7 @@ export async function updateConversationStatus(conversationId: string, status: s
 export async function updateConversationPriority(conversationId: string, priority: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -276,7 +281,7 @@ export async function updateConversationPriority(conversationId: string, priorit
     .single();
 
   if (!profile || !["admin", "super_admin", "sales_rep", "support_agent", "operations_manager"].includes(profile.role)) {
-    return { success: false, error: "Only staff can update conversation priority." };
+    return { success: false, error: await te("Only staff can update conversation priority.") };
   }
 
   const { data, error } = await supabase
@@ -322,7 +327,7 @@ export async function createProduct(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -331,7 +336,7 @@ export async function createProduct(input: {
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can create products." };
+    return { success: false, error: await te("Only admins can create products.") };
   }
 
   const { data, error } = await supabase
@@ -375,7 +380,7 @@ export async function createProduct(input: {
 export async function updateProduct(productId: string, input: Record<string, unknown>): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -384,7 +389,7 @@ export async function updateProduct(productId: string, input: Record<string, unk
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can update products." };
+    return { success: false, error: await te("Only admins can update products.") };
   }
 
   // Map camelCase input keys to snake_case DB columns
@@ -430,7 +435,7 @@ export async function updateProduct(productId: string, input: Record<string, unk
 export async function deleteProduct(productId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -439,7 +444,7 @@ export async function deleteProduct(productId: string): Promise<ActionResult> {
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can delete products." };
+    return { success: false, error: await te("Only admins can delete products.") };
   }
 
   const { error } = await supabase
@@ -467,7 +472,7 @@ export async function createSubCategory(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -476,7 +481,7 @@ export async function createSubCategory(input: {
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can create sub-categories." };
+    return { success: false, error: await te("Only admins can create sub-categories.") };
   }
 
   const { data, error } = await supabase
@@ -505,7 +510,7 @@ export async function createSubCategory(input: {
 export async function updateSubCategory(subCategoryId: string, input: Record<string, unknown>): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -514,7 +519,7 @@ export async function updateSubCategory(subCategoryId: string, input: Record<str
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can update sub-categories." };
+    return { success: false, error: await te("Only admins can update sub-categories.") };
   }
 
   const { data, error } = await supabase
@@ -534,7 +539,7 @@ export async function updateSubCategory(subCategoryId: string, input: Record<str
 export async function deleteSubCategory(subCategoryId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -543,7 +548,7 @@ export async function deleteSubCategory(subCategoryId: string): Promise<ActionRe
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can delete sub-categories." };
+    return { success: false, error: await te("Only admins can delete sub-categories.") };
   }
 
   const { error } = await supabase
@@ -576,7 +581,7 @@ export async function createOrder(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -584,11 +589,11 @@ export async function createOrder(input: {
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only staff can create orders." };
+    return { success: false, error: await te("Only staff can create orders.") };
   }
 
   const orderNumber = `AW-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 100000)).padStart(5, "0")}`;
@@ -637,7 +642,7 @@ export async function createOrder(input: {
 export async function updateOrderStatus(orderId: string, status: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -645,11 +650,11 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only staff can update order status." };
+    return { success: false, error: await te("Only staff can update order status.") };
   }
 
   const { data, error } = await supabase
@@ -678,7 +683,7 @@ export async function createShipment(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -686,11 +691,11 @@ export async function createShipment(input: {
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only logistics staff can create shipments." };
+    return { success: false, error: await te("Only logistics staff can create shipments.") };
   }
 
   const shipmentNumber = `SHP-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 100000)).padStart(5, "0")}`;
@@ -727,7 +732,7 @@ export async function updateShipmentStatus(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -735,11 +740,11 @@ export async function updateShipmentStatus(
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only logistics staff can update shipments." };
+    return { success: false, error: await te("Only logistics staff can update shipments.") };
   }
 
   if (milestone) {
@@ -803,7 +808,7 @@ export async function updateCustomerProfile(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const updateData: Record<string, unknown> = {};
   if (input.companyName !== undefined) updateData.company_name = input.companyName;
@@ -831,7 +836,7 @@ export async function updateCustomerProfile(
 export async function updateCustomerVerification(customerId: string, status: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -840,7 +845,7 @@ export async function updateCustomerVerification(customerId: string, status: str
     .single();
 
   if (!profile || !["admin", "super_admin", "operations_manager"].includes(profile.role)) {
-    return { success: false, error: "Only admins can update verification status." };
+    return { success: false, error: await te("Only admins can update verification status.") };
   }
 
   const { data, error } = await supabase
@@ -868,7 +873,7 @@ export async function createStaffMember(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -877,7 +882,7 @@ export async function createStaffMember(input: {
     .single();
 
   if (!profile || profile.role !== "super_admin") {
-    return { success: false, error: "Only super admins can add staff members." };
+    return { success: false, error: await te("Only super admins can add staff members.") };
   }
 
   const { data, error } = await supabase
@@ -899,7 +904,7 @@ export async function createStaffMember(input: {
   if (input.role) {
     const validRoles = ["customer", "sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
     if (!validRoles.includes(input.role)) {
-      return { success: false, error: "Invalid role specified." };
+      return { success: false, error: await te("Invalid role specified.") };
     }
 
     const { error: roleError } = await supabase
@@ -919,7 +924,7 @@ export async function createStaffMember(input: {
 export async function updateUserRole(userId: string, role: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -928,17 +933,17 @@ export async function updateUserRole(userId: string, role: string): Promise<Acti
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can change user roles." };
+    return { success: false, error: await te("Only admins can change user roles.") };
   }
 
   // Prevent admin from changing their own role (self-lockout guard)
   if (user.id === userId) {
-    return { success: false, error: "You cannot change your own role." };
+    return { success: false, error: await te("You cannot change your own role.") };
   }
 
   const validRoles = ["customer", "sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!validRoles.includes(role)) {
-    return { success: false, error: "Invalid role specified." };
+    return { success: false, error: await te("Invalid role specified.") };
   }
 
   const { data, error } = await supabase
@@ -961,7 +966,7 @@ export async function updateStaffMember(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -970,7 +975,7 @@ export async function updateStaffMember(
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can update staff members." };
+    return { success: false, error: await te("Only admins can update staff members.") };
   }
 
   const updateData: Record<string, unknown> = {};
@@ -995,7 +1000,7 @@ export async function updateStaffMember(
 export async function suspendUser(userId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1004,11 +1009,11 @@ export async function suspendUser(userId: string): Promise<ActionResult> {
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can suspend users." };
+    return { success: false, error: await te("Only admins can suspend users.") };
   }
 
   if (user.id === userId) {
-    return { success: false, error: "You cannot suspend your own account." };
+    return { success: false, error: await te("You cannot suspend your own account.") };
   }
 
   const { data, error } = await supabase
@@ -1028,7 +1033,7 @@ export async function suspendUser(userId: string): Promise<ActionResult> {
 export async function unsuspendUser(userId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1037,7 +1042,7 @@ export async function unsuspendUser(userId: string): Promise<ActionResult> {
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can unsuspend users." };
+    return { success: false, error: await te("Only admins can unsuspend users.") };
   }
 
   const { data, error } = await supabase
@@ -1057,7 +1062,7 @@ export async function unsuspendUser(userId: string): Promise<ActionResult> {
 export async function deleteUser(userId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1066,11 +1071,11 @@ export async function deleteUser(userId: string): Promise<ActionResult> {
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can delete users." };
+    return { success: false, error: await te("Only admins can delete users.") };
   }
 
   if (user.id === userId) {
-    return { success: false, error: "You cannot delete your own account." };
+    return { success: false, error: await te("You cannot delete your own account.") };
   }
 
   // Delete staff row if exists (staff references auth.users via ON DELETE CASCADE,
@@ -1105,7 +1110,7 @@ export async function updateProfile(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const updateData: Record<string, unknown> = {};
   if (input.firstName !== undefined) updateData.first_name = input.firstName;
@@ -1147,7 +1152,7 @@ export async function createPurchaseRequest(input: {
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1155,11 +1160,11 @@ export async function createPurchaseRequest(input: {
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only staff can create purchase requests." };
+    return { success: false, error: await te("Only staff can create purchase requests.") };
   }
 
   const prNumber = `PR-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 100000)).padStart(5, "0")}`;
@@ -1197,7 +1202,7 @@ export async function updatePurchaseRequest(
 ): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1205,11 +1210,11 @@ export async function updatePurchaseRequest(
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only staff can update purchase requests." };
+    return { success: false, error: await te("Only staff can update purchase requests.") };
   }
 
   const { data, error } = await supabase
@@ -1228,7 +1233,7 @@ export async function updatePurchaseRequest(
 export async function deletePurchaseRequest(prId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1236,11 +1241,11 @@ export async function deletePurchaseRequest(prId: string): Promise<ActionResult>
     .eq("id", user.id)
     .single();
 
-  if (!profile) return { success: false, error: "Profile not found." };
+  if (!profile) return { success: false, error: await te("Profile not found.") };
 
   const staffRoles = ["sales_rep", "support_agent", "warehouse_staff", "logistics_staff", "operations_manager", "admin", "super_admin"];
   if (!staffRoles.includes(profile.role)) {
-    return { success: false, error: "Only staff can delete purchase requests." };
+    return { success: false, error: await te("Only staff can delete purchase requests.") };
   }
 
   const { error } = await supabase
@@ -1256,32 +1261,10 @@ export async function deletePurchaseRequest(prId: string): Promise<ActionResult>
 
 // --- File Upload Actions ---
 
-export async function uploadFile(bucket: string, filePath: string, file: File): Promise<ActionResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
-
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(filePath, file, {
-      cacheControl: "3600",
-      upsert: false,
-    });
-
-  if (error) return { success: false, error: error.message };
-
-  const { data: urlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(filePath);
-
-  return { success: true, data: { path: data.path, url: urlData.publicUrl } };
-}
-
-
 export async function uploadProductVideo(file: File): Promise<ActionResult & { data?: { url: string } }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1290,21 +1273,21 @@ export async function uploadProductVideo(file: File): Promise<ActionResult & { d
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can upload product videos." };
+    return { success: false, error: await te("Only admins can upload product videos.") };
   }
 
-  // Validate file type
-  if (!file.type.startsWith("video/")) {
-    return { success: false, error: "File must be a video." };
+  // Validate the real file type from its first bytes, not the declared MIME type.
+  const video = await detectVideo(file);
+  if (!video) {
+    return { success: false, error: await te("File must be a video.") };
   }
 
   // Validate file size (max 100MB)
   if (file.size > 100 * 1024 * 1024) {
-    return { success: false, error: "Video must be smaller than 100MB." };
+    return { success: false, error: await te("Video must be smaller than 100MB.") };
   }
 
-  const ext = file.name.split(".").pop() || "mp4";
-  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${video.ext}`;
   const filePath = `${user.id}/${fileName}`;
 
   const { data, error } = await supabase.storage
@@ -1312,6 +1295,7 @@ export async function uploadProductVideo(file: File): Promise<ActionResult & { d
     .upload(filePath, file, {
       cacheControl: "3600",
       upsert: false,
+      contentType: video.mime,
     });
 
   if (error) return { success: false, error: error.message };
@@ -1326,7 +1310,7 @@ export async function uploadProductVideo(file: File): Promise<ActionResult & { d
 export async function deleteProductVideo(filePath: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1335,7 +1319,7 @@ export async function deleteProductVideo(filePath: string): Promise<ActionResult
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can delete product videos." };
+    return { success: false, error: await te("Only admins can delete product videos.") };
   }
 
   const { error } = await supabase.storage
@@ -1350,7 +1334,7 @@ export async function deleteProductVideo(filePath: string): Promise<ActionResult
 export async function uploadProductImages(files: File[]): Promise<ActionResult & { data?: { urls: string[] } }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1359,15 +1343,16 @@ export async function uploadProductImages(files: File[]): Promise<ActionResult &
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can upload product images." };
+    return { success: false, error: await te("Only admins can upload product images.") };
   }
 
   const urls: string[] = [];
   const errors: string[] = [];
 
   for (const file of files) {
-    // Validate file type
-    if (!file.type.startsWith("image/")) {
+    // Validate the real file type from its first bytes (SVG and anything else is refused).
+    const image = await detectImage(file);
+    if (!image) {
       errors.push(`${file.name} is not an image`);
       continue;
     }
@@ -1379,8 +1364,7 @@ export async function uploadProductImages(files: File[]): Promise<ActionResult &
     }
 
     // Generate unique file path
-    const ext = file.name.split(".").pop() || "jpg";
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${ext}`;
+    const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 10)}.${image.ext}`;
     const filePath = `products/${fileName}`;
 
     const { data, error } = await supabase.storage
@@ -1388,6 +1372,7 @@ export async function uploadProductImages(files: File[]): Promise<ActionResult &
       .upload(filePath, file, {
         cacheControl: "3600",
         upsert: false,
+        contentType: image.mime,
       });
 
     if (error) {
@@ -1412,7 +1397,7 @@ export async function uploadProductImages(files: File[]): Promise<ActionResult &
 export async function deleteProductImage(filePath: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  if (!user) return { success: false, error: await te("Unauthorized") };
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -1421,7 +1406,7 @@ export async function deleteProductImage(filePath: string): Promise<ActionResult
     .single();
 
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
-    return { success: false, error: "Only admins can delete product images." };
+    return { success: false, error: await te("Only admins can delete product images.") };
   }
 
   const { error } = await supabase.storage

@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { Settings, Globe, CreditCard, Bell, Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { updateProfile } from "@/app/actions/crud";
+import { useT } from "@/i18n/client";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
 interface SettingsManagerProps {
   profile: {
@@ -21,6 +23,8 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const t = useT();
+  const S = t.admin.settings;
   const [notifications, setNotifications] = useState({
     newOrders: true,
     quoteRequests: true,
@@ -44,7 +48,7 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
-        setError(result.error || "Failed to update profile");
+        setError(result.error || t.admin.common.failed);
       }
     });
   }
@@ -56,9 +60,9 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-bold text-navy tracking-tight">{S.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Configure your account and platform preferences.
+          {S.lead}
         </p>
       </div>
 
@@ -71,7 +75,7 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
       {success && (
         <div className="rounded-[var(--radius-sm)] border border-success/20 bg-success/10 px-4 py-3 text-sm text-success flex items-center gap-2">
           <Check className="h-4 w-4" />
-          Profile updated successfully!
+          {S.saved}
         </div>
       )}
 
@@ -80,12 +84,12 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Settings className="h-5 w-5 text-brand" />
-            <h3 className="text-sm font-semibold text-navy">Your Profile</h3>
+            <h3 className="text-sm font-semibold text-navy">{S.profile}</h3>
           </div>
           <form action={handleSaveProfile} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">First Name</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.firstName}</label>
                 <input
                   type="text"
                   name="firstName"
@@ -95,7 +99,7 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Last Name</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.lastName}</label>
                 <input
                   type="text"
                   name="lastName"
@@ -106,17 +110,17 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Email</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.email}</label>
               <input
                 type="email"
                 defaultValue={profile.email}
                 disabled
                 className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface-secondary px-4 text-sm text-text-secondary"
               />
-              <p className="text-xs text-text-disabled mt-1">Email cannot be changed here.</p>
+              <p className="text-xs text-text-disabled mt-1">{S.emailHint}</p>
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Company</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.company}</label>
               <input
                 type="text"
                 name="company"
@@ -126,7 +130,7 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Phone</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.phone}</label>
                 <input
                   type="tel"
                   name="phone"
@@ -135,7 +139,7 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Country</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.country}</label>
                 <input
                   type="text"
                   name="country"
@@ -150,7 +154,7 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
                 disabled={isPending}
                 className="flex h-10 items-center rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
               >
-                {isPending ? "Saving..." : "Save Profile"}
+                {isPending ? t.admin.common.saving : S.save}
               </button>
             </div>
           </form>
@@ -160,18 +164,15 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Globe className="h-5 w-5 text-brand" />
-            <h3 className="text-sm font-semibold text-navy">Regional</h3>
+            <h3 className="text-sm font-semibold text-navy">{S.regional}</h3>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Default Language</label>
-              <select className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer">
-                <option>English</option>
-                <option>French</option>
-              </select>
+              <span className="block text-xs font-medium text-text-secondary mb-1.5">{S.language}</span>
+              <LanguageSwitcher align="left" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Timezone</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.timezone}</label>
               <select className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer">
                 <option>Africa/Douala (GMT+1)</option>
                 <option>Africa/Lagos (GMT+1)</option>
@@ -179,8 +180,8 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Sourcing Region</label>
-              <input type="text" defaultValue="China" className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none" />
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.sourcingRegion}</label>
+              <input type="text" defaultValue={S.sourcingRegionValue} className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none" />
             </div>
           </div>
         </Card>
@@ -189,23 +190,23 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <CreditCard className="h-5 w-5 text-brand" />
-            <h3 className="text-sm font-semibold text-navy">Payment</h3>
+            <h3 className="text-sm font-semibold text-navy">{S.payment}</h3>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Accepted Methods</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.methods}</label>
               <div className="flex flex-wrap gap-2">
-                {["Bank Transfer", "Wire", "PayPal", "Stripe", "Mobile Money"].map((m) => (
+                {Object.values(S.methodNames).map((m) => (
                   <span key={m} className="inline-flex items-center rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-primary">{m}</span>
                 ))}
               </div>
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">Default Payment Terms</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.terms}</label>
               <select className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer">
-                <option>50% deposit, 50% before shipping</option>
-                <option>100% upfront</option>
-                <option>30% deposit, 70% on delivery</option>
+                <option>{S.termOptions.split}</option>
+                <option>{S.termOptions.upfront}</option>
+                <option>{S.termOptions.delivery}</option>
               </select>
             </div>
           </div>
@@ -215,20 +216,23 @@ export function SettingsManager({ profile }: SettingsManagerProps) {
         <Card className="p-6">
           <div className="flex items-center gap-2 mb-4">
             <Bell className="h-5 w-5 text-brand" />
-            <h3 className="text-sm font-semibold text-navy">Notifications</h3>
+            <h3 className="text-sm font-semibold text-navy">{S.notifications}</h3>
           </div>
           <div className="space-y-3">
             {[
-              { key: "newOrders" as const, label: "New order alerts" },
-              { key: "quoteRequests" as const, label: "Quote request notifications" },
-              { key: "lowStock" as const, label: "Low stock warnings" },
-              { key: "shipmentUpdates" as const, label: "Shipment milestone updates" },
-              { key: "customerRegistrations" as const, label: "Customer registration alerts" },
+              { key: "newOrders" as const, label: S.toggles.newOrders },
+              { key: "quoteRequests" as const, label: S.toggles.quoteRequests },
+              { key: "lowStock" as const, label: S.toggles.lowStock },
+              { key: "shipmentUpdates" as const, label: S.toggles.shipmentUpdates },
+              { key: "customerRegistrations" as const, label: S.toggles.customerRegistrations },
             ].map((item) => (
               <div key={item.key} className="flex items-center justify-between">
                 <span className="text-sm text-text-primary">{item.label}</span>
                 <button
                   onClick={() => toggleNotification(item.key)}
+                  role="switch"
+                  aria-checked={notifications[item.key]}
+                  aria-label={item.label}
                   className={`relative h-6 w-11 rounded-full transition-colors ${notifications[item.key] ? "bg-brand" : "bg-surface-secondary"}`}
                 >
                   <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${notifications[item.key] ? "right-0.5" : "left-0.5"}`} />

@@ -18,7 +18,7 @@ import type {
 
 // --- Type mappers: DB row → frontend type ---
 
-interface ProductRow {
+export interface ProductRow {
   id: string;
   name: string;
   slug: string;
@@ -46,7 +46,7 @@ interface ProductRow {
   is_active: boolean;
 }
 
-function mapProduct(row: ProductRow): Product {
+export function mapProduct(row: ProductRow): Product {
   const images = row.images && row.images.length > 0
     ? row.images
     : row.image_url
@@ -187,6 +187,9 @@ interface OrderRow {
   total_amount: number;
   currency: string;
   payment_status: string;
+  awaiting_price?: boolean;
+  amount_paid?: number | null;
+  wallet_applied?: number | null;
   shipping_address: Record<string, string> | null;
   notes: string | null;
   created_at: string;
@@ -609,6 +612,10 @@ export async function getOrdersByCustomer(customerId: string): Promise<Order[]> 
       status: mapOrderStatus(orderRow.status),
       totalAmount: Number(orderRow.total_amount),
       currency: orderRow.currency,
+      paymentStatus: orderRow.payment_status as Order["paymentStatus"],
+      awaitingPrice: orderRow.awaiting_price ?? false,
+      amountPaid: Number(orderRow.amount_paid ?? 0),
+      walletApplied: Number(orderRow.wallet_applied ?? 0),
       createdAt: orderRow.created_at,
       updatedAt: orderRow.updated_at,
     });
@@ -646,6 +653,10 @@ export async function getAllOrders(): Promise<Order[]> {
       status: mapOrderStatus(orderRow.status),
       totalAmount: Number(orderRow.total_amount),
       currency: orderRow.currency,
+      paymentStatus: orderRow.payment_status as Order["paymentStatus"],
+      awaitingPrice: orderRow.awaiting_price ?? false,
+      amountPaid: Number(orderRow.amount_paid ?? 0),
+      walletApplied: Number(orderRow.wallet_applied ?? 0),
       createdAt: orderRow.created_at,
       updatedAt: orderRow.updated_at,
     });

@@ -140,6 +140,12 @@ export interface Order {
   items: OrderItem[];
   status: OrderStatus;
   totalAmount: number;
+  paymentStatus?: "pending" | "partial" | "paid" | "refunded" | "failed";
+  awaitingPrice?: boolean;
+  /** Paid so far through SasPay (deposit + balance), in the order's currency. */
+  amountPaid?: number;
+  /** Covered by the affiliate wallet. */
+  walletApplied?: number;
   currency: string;
   createdAt: string;
   updatedAt: string;
@@ -192,6 +198,7 @@ export interface Message {
   attachments: string[];
   isInternalNote: boolean;
   createdAt: string;
+  readAt?: string | null;
 }
 
 export interface Conversation {

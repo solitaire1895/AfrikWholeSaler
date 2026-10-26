@@ -1,393 +1,300 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import {
-  MessageCircle,
-  Send,
-  Paperclip,
-  Sparkles,
-  Search,
-  Tag,
-  Bot,
-  User,
-  Headphones,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { MessageCircle, Plus, Search, ChevronLeft, Package, Headphones, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchMyConversations, fetchMessages, mapMessageRow } from "@/lib/client-queries";
-import { sendMessage, markMessagesRead } from "@/app/actions/crud";
-import { subscribeToMessages } from "@/lib/realtime";
-import type { Message, Conversation } from "@/types";
+import { useNotifications } from "@/lib/notifications-context";
+import {
+  fetchConversationSummaries,
+  subscribeToAllMessages,
+  previewOf,
+  useSupportOnline,
+  type ConversationSummary,
+} from "@/lib/chat";
+import { SUPPORT_TOPICS } from "@/lib/chat-topics";
+import { createSupportConversation } from "@/app/actions/chat";
+import { ChatThread } from "@/components/chat/chat-thread";
+import { useI18n } from "@/i18n/client";
 
-const priorityColors: Record<string, string> = {
-  Low: "bg-surface-secondary text-text-secondary",
-  Normal: "bg-info/10 text-info",
-  High: "bg-warning/10 text-warning",
-  Urgent: "bg-error/10 text-error",
-};
-
-export default function MessagesPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConvId, setSelectedConvId] = useState("");
-  const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>({});
-  const [sending, setSending] = useState(false);
-  const [input, setInput] = useState("");
+function Inbox() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const { setActiveConversation } = useNotifications();
+  const online = useSupportOnline();
+  const { t, timeAgo } = useI18n();
+  const I = t.chat.inbox;
+  const topicName = (topic: string) => (t.chat.topics as Record<string, string>)[topic] ?? topic;
+  const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
   const [search, setSearch] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [newTopic, setNewTopic] = useState<string | null>(null);
+  const [picking, setPicking] = useState(false);
 
-  const selectedConv = conversations.find((c) => c.id === selectedConvId);
-  const selectedMessages = chatMessages[selectedConvId] || [];
+  const selectedId = params.get("c");
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedMessages]);
+  const select = useCallback(
+    (id: string | null) => {
+      setNewTopic(null);
+      if (id) setConversations((prev) => prev?.map((c) => (c.id === id ? { ...c, unread: 0 } : c)) ?? prev);
+      router.replace(id ? `/dashboard/messages?c=${id}` : "/dashboard/messages", { scroll: false });
+    },
+    [router]
+  );
 
-  useEffect(() => {
-    fetchMyConversations().then((convs) => {
-      setConversations(convs);
-      if (convs[0]) setSelectedConvId(convs[0].id);
-    });
+  const load = useCallback(async () => {
+    const list = await fetchConversationSummaries();
+    setConversations(list);
+    return list;
   }, []);
 
+  // Initial load; open the most recent conversation on wide screens.
   useEffect(() => {
-    if (!selectedConvId) return;
-    let active = true;
-
-    fetchMessages(selectedConvId).then((msgs) => {
-      if (active) setChatMessages((prev) => ({ ...prev, [selectedConvId]: msgs }));
+    fetchConversationSummaries().then((list) => {
+      setConversations(list);
+      if (!params.get("c") && list[0] && window.matchMedia("(min-width: 640px)").matches) select(list[0].id);
     });
-    markMessagesRead(selectedConvId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, []);
 
-    const unsubscribe = subscribeToMessages(selectedConvId, (row) => {
-      const msg = mapMessageRow(row as Parameters<typeof mapMessageRow>[0]);
-      setChatMessages((prev) => {
-        const existing = prev[selectedConvId] || [];
-        if (existing.some((m) => m.id === msg.id)) return prev;
-        return { ...prev, [selectedConvId]: [...existing, msg] };
+  // Live: bump conversations and unread counts as messages arrive.
+  useEffect(() => {
+    return subscribeToAllMessages((m) => {
+      if (m.isInternalNote) return;
+      setConversations((prev) => {
+        if (!prev) return prev;
+        const conv = prev.find((c) => c.id === m.conversationId);
+        if (!conv) {
+          load();
+          return prev;
+        }
+        const updated: ConversationSummary = {
+          ...conv,
+          lastMessage: previewOf(m),
+          lastSender: m.senderRole,
+          lastMessageAt: m.createdAt,
+          unread: m.senderRole !== "customer" && m.conversationId !== selectedId ? conv.unread + 1 : conv.unread,
+        };
+        return [updated, ...prev.filter((c) => c.id !== conv.id)];
       });
     });
+  }, [load, selectedId]);
 
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [selectedConvId]);
+  // No toasts/sound for the conversation that is open.
+  useEffect(() => {
+    setActiveConversation(selectedId);
+    return () => setActiveConversation(null);
+  }, [selectedId, setActiveConversation]);
 
-  const handleSend = async () => {
-    if (!input.trim() || !selectedConvId || sending) return;
-    const content = input.trim();
-    setInput("");
-    setSending(true);
-    const result = await sendMessage({ conversationId: selectedConvId, content });
-    setSending(false);
-    if (!result.success) setInput(content);
-  };
-
-  const filteredConversations = conversations.filter((c) => {
-    if (!search.trim()) return true;
-    const query = search.toLowerCase();
-    return (
-      c.customerName.toLowerCase().includes(query) ||
-      c.tags.some((t) => t.toLowerCase().includes(query))
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!conversations) return [];
+    if (!q) return conversations;
+    return conversations.filter((c) =>
+      [c.subject, c.productName, c.lastMessage].some((v) => v?.toLowerCase().includes(q))
     );
-  });
+  }, [conversations, search]);
 
-  const formatTime = (iso: string) => {
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-    const diffDays = diffHours / 24;
-
-    if (diffHours < 1) return "Just now";
-    if (diffHours < 24) return `${Math.floor(diffHours)}h ago`;
-    if (diffDays < 7) return `${Math.floor(diffDays)}d ago`;
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
+  const selected = conversations?.find((c) => c.id === selectedId) ?? null;
+  const showThread = !!selected || !!newTopic;
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-navy tracking-tight">Messages</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Chat with our team about orders, quotes, and product inquiries.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-navy">{I.title}</h1>
+          <p className="mt-1 flex items-center gap-2 text-sm text-text-secondary">
+            <span className={cn("h-2 w-2 rounded-full", online ? "bg-success" : "bg-text-disabled")} />
+            {online ? I.onlineNow : I.replyHours}
+          </p>
+        </div>
+        <button
+          onClick={() => setPicking(true)}
+          className="flex h-10 items-center gap-2 rounded-full bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover"
+        >
+          <Plus className="h-4 w-4" /> {I.newConversation}
+        </button>
       </div>
 
-      {/* Chat Layout */}
-      <div className="flex h-[calc(100vh-12rem)] lg:h-[calc(100vh-10rem)] rounded-[var(--radius-lg)] border border-border bg-surface overflow-hidden">
-        {/* Conversation List */}
-        <div
-          className={cn(
-            "w-full sm:w-80 shrink-0 border-r border-border flex flex-col",
-            selectedConvId && "hidden sm:flex"
-          )}
-        >
-          {/* Search */}
-          <div className="p-3 border-b border-border">
+      <div className="flex h-[calc(100vh-13rem)] min-h-[480px] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface">
+        {/* Conversation list */}
+        <div className={cn("flex w-full shrink-0 flex-col border-r border-border sm:w-80", showThread && "hidden sm:flex")}>
+          <div className="border-b border-border p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
               <input
-                type="text"
-                placeholder="Search conversations..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none"
+                placeholder={I.search}
+                className="h-10 w-full rounded-full border border-border bg-surface pl-10 pr-4 text-sm focus:border-navy focus:outline-none"
               />
             </div>
           </div>
-
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {filteredConversations.map((conv) => {
-              const convMessages = chatMessages[conv.id] || [];
-              const lastMsg = convMessages[convMessages.length - 1];
-              return (
-                <button
-                  key={conv.id}
-                  onClick={() => setSelectedConvId(conv.id)}
-                  className={cn(
-                    "w-full flex flex-col items-start p-4 border-b border-border text-left transition-colors",
-                    selectedConvId === conv.id
-                      ? "bg-brand-light"
-                      : "hover:bg-surface-secondary/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full mb-1">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-light text-brand font-semibold text-xs">
-                        {conv.customerName[0]}
-                      </div>
-                      <span className="text-sm font-semibold text-text-primary">
-                        {conv.customerName}
-                      </span>
-                    </div>
-                    {conv.unreadCount > 0 && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-xs font-bold text-white">
-                        {conv.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                  {lastMsg && (
-                    <p className="text-xs text-text-secondary truncate w-full mb-2">
-                      {lastMsg.senderRole === "customer" ? "You: " : ""}
-                      {lastMsg.content}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 w-full">
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                        priorityColors[conv.priority]
-                      )}
-                    >
-                      {conv.priority}
-                    </span>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {conv.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-0.5 text-xs text-text-disabled"
-                        >
-                          <Tag className="h-2.5 w-2.5" />
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                    <span className="text-xs text-text-disabled ml-auto">
-                      {formatTime(conv.lastMessageAt)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Chat Thread */}
-        {selectedConv ? (
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Chat Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setSelectedConvId("")}
-                  className="sm:hidden flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary"
-                >
-                  ←
-                </button>
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-brand font-semibold text-sm">
-                  {selectedConv.customerName[0]}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-text-primary">
-                    {selectedConv.customerName}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                        priorityColors[selectedConv.priority]
-                      )}
-                    >
-                      {selectedConv.priority}
-                    </span>
-                    <span className="text-xs text-text-secondary">
-                      {selectedConv.assignedAgentId
-                        ? "Agent assigned"
-                        : "Awaiting agent"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-success">
-                <div className="h-2 w-2 rounded-full bg-success" />
-                Online
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-surface-secondary/30">
-              {selectedMessages.map((msg) => {
-                const isCustomer = msg.senderRole === "customer";
-                const isAI = msg.senderRole === "ai";
-                return (
-                  <div
-                    key={msg.id}
+          <ul className="flex-1 overflow-y-auto">
+            {conversations === null ? (
+              [0, 1, 2, 3].map((i) => (
+                <li key={i} className="flex gap-3 border-b border-border p-4">
+                  <span className="h-10 w-10 animate-pulse rounded-full bg-surface-secondary" />
+                  <span className="flex-1 space-y-2">
+                    <span className="block h-3 w-2/3 animate-pulse rounded bg-surface-secondary" />
+                    <span className="block h-3 w-1/2 animate-pulse rounded bg-surface-secondary" />
+                  </span>
+                </li>
+              ))
+            ) : filtered.length === 0 ? (
+              <li className="p-8 text-center">
+                <MessageCircle className="mx-auto mb-2 h-8 w-8 text-text-disabled" />
+                <p className="text-sm text-text-secondary">
+                  {search ? I.noMatch : I.none}
+                </p>
+              </li>
+            ) : (
+              filtered.map((c) => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => select(c.id)}
                     className={cn(
-                      "flex gap-3",
-                      isCustomer ? "flex-row-reverse" : "flex-row"
+                      "flex w-full gap-3 border-b border-border p-4 text-left transition-colors",
+                      c.id === selectedId ? "bg-brand-light" : "hover:bg-surface-secondary/60"
                     )}
                   >
-                    {/* Avatar */}
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                        isCustomer
-                          ? "bg-brand text-white"
-                          : isAI
-                            ? "bg-navy text-white"
-                            : "bg-surface border border-border text-text-secondary"
-                      )}
-                    >
-                      {isCustomer ? (
-                        <User className="h-4 w-4" />
-                      ) : isAI ? (
-                        <Bot className="h-4 w-4" />
+                    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-navy/5 text-navy">
+                      {c.productImage ? (
+                        <Image src={c.productImage} alt="" fill sizes="40px" className="object-cover" />
+                      ) : c.productId ? (
+                        <Package className="h-4 w-4" />
                       ) : (
                         <Headphones className="h-4 w-4" />
                       )}
-                    </div>
-
-                    {/* Message Bubble */}
-                    <div
-                      className={cn(
-                        "max-w-[75%] sm:max-w-[60%]",
-                        isCustomer ? "items-end" : "items-start"
-                      )}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-semibold text-text-primary">
-                          {isCustomer
-                            ? "You"
-                            : isAI
-                              ? "AI Assistant"
-                              : "Support Agent"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={cn("truncate text-sm", c.unread ? "font-semibold text-navy" : "font-medium text-text-primary")}>
+                          {c.productName ?? topicName(c.subject)}
                         </span>
-                        <span className="text-xs text-text-disabled">
-                          {new Date(msg.createdAt).toLocaleTimeString("en-US", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                        <span className="shrink-0 text-[11px] text-text-disabled">{timeAgo(c.lastMessageAt)}</span>
+                      </span>
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        <span className="truncate text-xs text-text-secondary">
+                          {c.lastSender === "customer" ? I.you : ""}
+                          {c.lastMessage ?? "—"}
                         </span>
-                      </div>
-                      <div
-                        className={cn(
-                          "rounded-[var(--radius-md)] px-4 py-2.5 text-sm",
-                          isCustomer
-                            ? "bg-brand text-white rounded-tr-sm"
-                            : isAI
-                              ? "bg-navy text-white rounded-tl-sm"
-                              : "bg-surface border border-border text-text-primary rounded-tl-sm"
+                        {c.unread > 0 && (
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
+                            {c.unread}
+                          </span>
                         )}
-                      >
-                        {msg.content}
-                      </div>
-                      {msg.attachments.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {msg.attachments.map((att) => (
-                            <div
-                              key={att}
-                              className={cn(
-                                "flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs",
-                                isCustomer
-                                  ? "bg-brand/10 text-brand"
-                                  : "bg-surface border border-border text-text-secondary"
-                              )}
-                            >
-                              <Paperclip className="h-3 w-3" />
-                              {att}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
 
-            {/* Input */}
-            <div className="p-3 border-t border-border bg-surface">
-              <div className="flex items-center gap-2">
-                <button className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary transition-colors">
-                  <Paperclip className="h-5 w-5" />
-                </button>
-                <input
-                  type="text"
-                  placeholder="Type your message..."
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  className="flex-1 h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 transition-all"
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || sending}
-                  className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] bg-brand text-white hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                >
-                  <Send className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="flex items-center gap-1.5 mt-2 text-xs text-text-disabled">
-                <Sparkles className="h-3 w-3" />
-                <span>AI assistant may respond first for quick inquiries</span>
+        {/* Thread */}
+        {showThread ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+              <button
+                onClick={() => select(null)}
+                aria-label={I.backToList}
+                className="flex h-9 w-9 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary sm:hidden"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold text-navy">
+                  {selected?.productName ?? topicName(selected?.subject ?? newTopic ?? "")}
+                </p>
+                <p className="text-xs text-text-secondary">
+                  {selected?.productSlug ? (
+                    <Link href={`/products/${selected.productSlug}`} className="hover:text-brand">
+                      {I.viewProduct}
+                    </Link>
+                  ) : (
+                    I.support
+                  )}
+                </p>
               </div>
             </div>
+            <ChatThread
+              key={selectedId ?? `new-${newTopic}`}
+              conversationId={selectedId}
+              viewer="customer"
+              autoFocus
+              onCreate={async (text) => {
+                const res = await createSupportConversation(newTopic ?? "Something else", text);
+                if (!res.success) return { error: res.error };
+                const id = res.data!.conversationId;
+                await load();
+                select(id);
+                return { id };
+              }}
+              emptyState={
+                <div className="py-10 text-center">
+                  <p className="font-medium text-navy">{topicName(newTopic ?? "")}</p>
+                  <p className="mt-1 text-sm text-text-secondary">{I.tellUs}</p>
+                </div>
+              }
+            />
           </div>
         ) : (
-          <div className="hidden sm:flex flex-1 items-center justify-center">
+          <div className="hidden flex-1 items-center justify-center sm:flex">
             <div className="text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mx-auto mb-4">
+              <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary">
                 <MessageCircle className="h-8 w-8 text-text-disabled" />
-              </div>
-              <h3 className="text-lg font-semibold text-navy mb-1">
-                Select a conversation
-              </h3>
-              <p className="text-text-secondary text-sm">
-                Choose a conversation from the list to start chatting.
-              </p>
+              </span>
+              <h3 className="text-lg font-semibold text-navy">{I.selectTitle}</h3>
+              <p className="mt-1 text-sm text-text-secondary">{I.selectText}</p>
             </div>
           </div>
         )}
       </div>
+
+      {/* Topic picker */}
+      {picking && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-navy/50 p-4 sm:items-center" onClick={() => setPicking(false)}>
+          <div
+            role="dialog"
+            aria-label={I.pickerLabel}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md animate-[scale-in_0.2s_ease-out] rounded-[24px] bg-surface p-6 shadow-[var(--shadow-modal)]"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-navy">{I.pickerTitle}</h2>
+              <button onClick={() => setPicking(false)} aria-label={I.close} className="rounded-full p-1 hover:bg-surface-secondary">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {SUPPORT_TOPICS.map((topic) => (
+                <button
+                  key={topic}
+                  onClick={() => {
+                    setPicking(false);
+                    router.replace("/dashboard/messages", { scroll: false });
+                    setNewTopic(topic);
+                  }}
+                  className="rounded-2xl border border-border px-4 py-3 text-left text-sm font-medium text-text-primary transition-colors hover:border-brand/40 hover:bg-brand-light"
+                >
+                  {topicName(topic)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={null}>
+      <Inbox />
+    </Suspense>
   );
 }

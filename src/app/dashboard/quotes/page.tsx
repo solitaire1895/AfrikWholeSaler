@@ -12,6 +12,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { getCurrentCustomer, getQuotesByCustomer } from "@/lib/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import type { QuoteStatus } from "@/types";
+import { getI18n } from "@/i18n/server";
+import { countryName } from "@/i18n/names";
 
 const statusConfig: Record<
   QuoteStatus,
@@ -45,6 +47,8 @@ export default async function QuotesPage() {
   if (!customer) return null;
 
   const quoteRequests = await getQuotesByCustomer(customer.id);
+  const { t, format, formatDate, formatNumber } = await getI18n();
+  const Q = t.account.quotes;
 
   return (
     <div className="space-y-6">
@@ -52,15 +56,15 @@ export default async function QuotesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy tracking-tight">
-            Quote Requests
+            {Q.title}
           </h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Track the status of your quote requests.
+            {Q.lead}
           </p>
         </div>
         <ButtonLink href="/quote" variant="primary" size="md">
           <FileText className="h-4 w-4" />
-          New Quote Request
+          {Q.newQuote}
         </ButtonLink>
       </div>
 
@@ -91,34 +95,30 @@ export default async function QuotesPage() {
                         )}
                       >
                         <StatusIcon className="h-3 w-3" />
-                        {quote.status}
+                        {(t.status.quote as Record<string, string>)[quote.status] ?? quote.status}
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-text-secondary flex-wrap">
                       <span>
-                        Quantity:{" "}
+                        {Q.quantity}{" "}
                         <span className="font-medium text-text-primary">
-                          {quote.quantity.toLocaleString()} units
+                          {format(Q.units, { n: formatNumber(quote.quantity) })}
                         </span>
                       </span>
                       {quote.targetPrice > 0 && (
                         <span>
-                          Target:{" "}
+                          {Q.target}{" "}
                           <span className="font-medium text-text-primary">
-                            {formatPrice(quote.targetPrice)}/unit
+                            {format(Q.perUnit, { price: formatPrice(quote.targetPrice) })}
                           </span>
                         </span>
                       )}
                       <span className="flex items-center gap-1">
                         <MapPin className="h-3 w-3" />
-                        {quote.destinationCountry}
+                        {countryName(t, quote.destinationCountry)}
                       </span>
                       <span>
-                        {new Date(quote.createdAt).toLocaleDateString("en-US", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {formatDate(quote.createdAt)}
                       </span>
                     </div>
                     {quote.attachments.length > 0 && (
@@ -144,7 +144,7 @@ export default async function QuotesPage() {
                       size="sm"
                       className="shrink-0"
                     >
-                      View Quote
+                      {Q.viewQuote}
                       <ArrowRight className="h-3.5 w-3.5" />
                     </ButtonLink>
                   )}
@@ -152,7 +152,7 @@ export default async function QuotesPage() {
                     quote.status === "Under Review") && (
                     <span className="text-xs text-text-secondary shrink-0 flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" />
-                      Awaiting response
+                      {Q.awaiting}
                     </span>
                   )}
                 </div>
@@ -166,13 +166,13 @@ export default async function QuotesPage() {
             <FileText className="h-8 w-8 text-text-disabled" />
           </div>
           <h3 className="text-lg font-semibold text-navy mb-1">
-            No quote requests yet
+            {Q.emptyTitle}
           </h3>
           <p className="text-text-secondary text-sm mb-4">
-            Submit a quote request to get custom pricing on any product.
+            {Q.emptyText}
           </p>
           <ButtonLink href="/quote" variant="primary" size="md">
-            Request a Quote
+            {Q.request}
           </ButtonLink>
         </Card>
       )}

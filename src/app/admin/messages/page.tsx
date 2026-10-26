@@ -1,626 +1,407 @@
 "use client";
 
-import { useState, useRef, useEffect, useTransition } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   MessageCircle,
-  Send,
-  Paperclip,
   Search,
-  Tag,
-  Bot,
-  User,
-  Headphones,
-  X,
-  Lock,
   UserCheck,
   Flag,
   CheckCheck,
   Inbox,
+  X,
+  ChevronLeft,
+  Package,
+  ExternalLink,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useNotifications } from "@/lib/notifications-context";
 import {
-  fetchAllConversationsWithUnread,
-  fetchAllMessages,
-  mapMessageRow,
-} from "@/lib/client-queries";
-import {
-  sendMessage,
-  markMessagesRead,
-  assignConversation,
-  updateConversationStatus,
-  updateConversationPriority,
-  uploadFile,
-} from "@/app/actions/crud";
-import { subscribeToMessages } from "@/lib/realtime";
-import type { Message, Conversation } from "@/types";
+  fetchConversationSummaries,
+  subscribeToAllMessages,
+  previewOf,
+  type ConversationSummary,
+} from "@/lib/chat";
+import { updateConversationStatus, updateConversationPriority } from "@/app/actions/crud";
+import { assignConversationToMe } from "@/app/actions/chat";
+import { ChatThread } from "@/components/chat/chat-thread";
+import { useI18n } from "@/i18n/client";
 
 const priorityColors: Record<string, string> = {
-  Low: "bg-surface-secondary text-text-secondary",
-  Normal: "bg-info/10 text-info",
-  High: "bg-warning/10 text-warning",
-  Urgent: "bg-error/10 text-error",
+  low: "bg-surface-secondary text-text-secondary",
+  normal: "bg-info/10 text-info",
+  high: "bg-warning/10 text-warning",
+  urgent: "bg-error/10 text-error",
 };
 
-const statusColors: Record<string, string> = {
-  open: "bg-success/10 text-success",
-  pending_agent: "bg-warning/10 text-warning",
-  resolved: "bg-info/10 text-info",
-  closed: "bg-surface-secondary text-text-secondary",
-};
 
-export default function AdminMessagesPage() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConvId, setSelectedConvId] = useState("");
-  const [chatMessages, setChatMessages] = useState<Record<string, Message[]>>({});
-  const [sending, setSending] = useState(false);
-  const [input, setInput] = useState("");
+type Filter = "all" | "unread" | "mine" | "unassigned" | "resolved";
+
+function StaffInbox() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const { userId, setActiveConversation } = useNotifications();
+  const { t, format, timeAgo } = useI18n();
+  const M = t.chat.staff;
+  const topicName = (topic: string) => (t.chat.topics as Record<string, string>)[topic] ?? topic;
+  const [conversations, setConversations] = useState<ConversationSummary[] | null>(null);
   const [search, setSearch] = useState("");
-  const [isInternalNote, setIsInternalNote] = useState(false);
+  const [filter, setFilter] = useState<Filter>("all");
   const [error, setError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedConv = conversations.find((c) => c.id === selectedConvId);
-  const selectedMessages = chatMessages[selectedConvId] || [];
+  const selectedId = params.get("c");
+
+  const select = useCallback(
+    (id: string | null) => {
+      if (id) setConversations((prev) => prev?.map((c) => (c.id === id ? { ...c, unread: 0 } : c)) ?? prev);
+      router.replace(id ? `/admin/messages?c=${id}` : "/admin/messages", { scroll: false });
+    },
+    [router]
+  );
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedMessages]);
-
-  useEffect(() => {
-    fetchAllConversationsWithUnread().then((convs) => {
-      setConversations(convs);
-      if (convs[0]) setSelectedConvId(convs[0].id);
+    fetchConversationSummaries().then((list) => {
+      setConversations(list);
+      if (!params.get("c") && list[0] && window.matchMedia("(min-width: 640px)").matches) select(list[0].id);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
+  // Live list: new messages bump their conversation; unknown ones trigger a reload.
   useEffect(() => {
-    if (!selectedConvId) return;
-    let active = true;
-
-    fetchAllMessages(selectedConvId).then((msgs) => {
-      if (active) setChatMessages((prev) => ({ ...prev, [selectedConvId]: msgs }));
-    });
-    markMessagesRead(selectedConvId);
-
-    const unsubscribe = subscribeToMessages(selectedConvId, (row) => {
-      const msg = mapMessageRow(row as Parameters<typeof mapMessageRow>[0]);
-      setChatMessages((prev) => {
-        const existing = prev[selectedConvId] || [];
-        if (existing.some((m) => m.id === msg.id)) return prev;
-        return { ...prev, [selectedConvId]: [...existing, msg] };
+    return subscribeToAllMessages((m) => {
+      setConversations((prev) => {
+        if (!prev) return prev;
+        const conv = prev.find((c) => c.id === m.conversationId);
+        if (!conv) {
+          fetchConversationSummaries().then(setConversations);
+          return prev;
+        }
+        const fromCustomer = m.senderRole === "customer";
+        const updated: ConversationSummary = {
+          ...conv,
+          lastMessage: m.isInternalNote ? conv.lastMessage : previewOf(m),
+          lastSender: m.isInternalNote ? conv.lastSender : m.senderRole,
+          lastMessageAt: m.createdAt,
+          status: fromCustomer && (conv.status === "resolved" || conv.status === "closed") ? "open" : conv.status,
+          unread: fromCustomer && m.conversationId !== selectedId ? conv.unread + 1 : conv.unread,
+        };
+        return [updated, ...prev.filter((c) => c.id !== conv.id)];
       });
     });
+  }, [selectedId]);
 
-    return () => {
-      active = false;
-      unsubscribe();
+  useEffect(() => {
+    setActiveConversation(selectedId);
+    return () => setActiveConversation(null);
+  }, [selectedId, setActiveConversation]);
+
+  const patch = (id: string, changes: Partial<ConversationSummary>) =>
+    setConversations((prev) => prev?.map((c) => (c.id === id ? { ...c, ...changes } : c)) ?? prev);
+
+  function run(action: () => Promise<{ success: boolean; error?: string }>, onOk: () => void) {
+    startTransition(async () => {
+      const res = await action();
+      if (!res.success) setError(res.error || M.error);
+      else onOk();
+    });
+  }
+
+  const counts = useMemo(() => {
+    const list = conversations ?? [];
+    return {
+      all: list.filter((c) => c.status !== "resolved" && c.status !== "closed").length,
+      unread: list.filter((c) => c.unread > 0).length,
+      mine: list.filter((c) => c.assignedAgentId === userId).length,
+      unassigned: list.filter((c) => !c.assignedAgentId && c.status !== "resolved" && c.status !== "closed").length,
+      resolved: list.filter((c) => c.status === "resolved" || c.status === "closed").length,
     };
-  }, [selectedConvId]);
+  }, [conversations, userId]);
 
-  const handleSend = async () => {
-    if (!input.trim() || !selectedConvId || sending) return;
-    const content = input.trim();
-    setInput("");
-    setSending(true);
-    const result = await sendMessage({
-      conversationId: selectedConvId,
-      content,
-      isInternalNote,
-    });
-    setSending(false);
-    if (!result.success) {
-      setInput(content);
-      setError(result.error || "Failed to send message");
-    }
-  };
+  const filtered = useMemo(() => {
+    let list = conversations ?? [];
+    if (filter === "all") list = list.filter((c) => c.status !== "resolved" && c.status !== "closed");
+    if (filter === "unread") list = list.filter((c) => c.unread > 0);
+    if (filter === "mine") list = list.filter((c) => c.assignedAgentId === userId);
+    if (filter === "unassigned") list = list.filter((c) => !c.assignedAgentId && c.status !== "resolved" && c.status !== "closed");
+    if (filter === "resolved") list = list.filter((c) => c.status === "resolved" || c.status === "closed");
+    const q = search.trim().toLowerCase();
+    if (q)
+      list = list.filter((c) =>
+        [c.customerName, c.subject, c.productName, c.lastMessage, ...c.tags].some((v) => v?.toLowerCase().includes(q))
+      );
+    return list;
+  }, [conversations, filter, search, userId]);
 
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0 || !selectedConvId) return;
-    const file = files[0];
-
-    setIsUploading(true);
-    setError(null);
-
-    try {
-      const ext = file.name.split(".").pop() || "file";
-      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const filePath = `chat-attachments/${fileName}`;
-
-      const result = await uploadFile("chat-attachments", filePath, file);
-
-      if (result.success && result.data) {
-        const url = (result.data as { url: string }).url;
-        const attachmentMsg = await sendMessage({
-          conversationId: selectedConvId,
-          content: `📎 ${file.name}`,
-          attachments: [url],
-          isInternalNote,
-        });
-
-        if (!attachmentMsg.success) {
-          setError(attachmentMsg.error || "Failed to send attachment");
-        }
-      } else {
-        setError(result.error || "Failed to upload file");
-      }
-    } catch {
-      setError("Failed to upload file. Please try again.");
-    } finally {
-      setIsUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
-  };
-
-  function handleAssign(convId: string, agentId: string | null) {
-    startTransition(async () => {
-      const result = await assignConversation(convId, agentId);
-      if (!result.success) {
-        setError(result.error || "Failed to assign conversation");
-      } else {
-        // Update local state
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === convId ? { ...c, assignedAgentId: agentId } : c
-          )
-        );
-      }
-    });
-  }
-
-  function handleStatusChange(convId: string, status: string) {
-    startTransition(async () => {
-      const result = await updateConversationStatus(convId, status);
-      if (!result.success) {
-        setError(result.error || "Failed to update status");
-      }
-    });
-  }
-
-  function handlePriorityChange(convId: string, priority: string) {
-    startTransition(async () => {
-      const result = await updateConversationPriority(convId, priority);
-      if (!result.success) {
-        setError(result.error || "Failed to update priority");
-      } else {
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === convId
-              ? { ...c, priority: priority.charAt(0).toUpperCase() + priority.slice(1) as Conversation["priority"] }
-              : c
-          )
-        );
-      }
-    });
-  }
-
-  const filteredConversations = conversations.filter((c) => {
-    if (!search.trim()) return true;
-    const query = search.toLowerCase();
-    return (
-      c.customerName.toLowerCase().includes(query) ||
-      c.tags.some((t) => t.toLowerCase().includes(query))
-    );
-  });
-
-  const formatTime = (iso: string) => {
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-    const diffDays = diffHours / 24;
-
-    if (diffHours < 1) return "Just now";
-    if (diffHours < 24) return `${Math.floor(diffHours)}h ago`;
-    if (diffDays < 7) return `${Math.floor(diffDays)}d ago`;
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  };
-
-  const totalUnread = conversations.reduce((sum, c) => sum + c.unreadCount, 0);
+  const selected = conversations?.find((c) => c.id === selectedId) ?? null;
+  const totalUnread = (conversations ?? []).reduce((sum, c) => sum + c.unread, 0);
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Messages</h1>
-          <p className="mt-1 text-sm text-text-secondary">
-            Manage customer conversations, assign agents, and track support tickets.
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-navy">{M.title}</h1>
+          <p className="mt-1 text-sm text-text-secondary">{M.lead}</p>
         </div>
         {totalUnread > 0 && (
-          <div className="flex items-center gap-2 rounded-[var(--radius-sm)] bg-brand/10 px-3 py-1.5">
+          <div className="flex items-center gap-2 rounded-full bg-brand/10 px-3 py-1.5">
             <Inbox className="h-4 w-4 text-brand" />
-            <span className="text-sm font-semibold text-brand">{totalUnread} unread</span>
+            <span className="text-sm font-semibold text-brand">{format(M.unread, { n: totalUnread })}</span>
           </div>
         )}
       </div>
 
-      {/* Error Banner */}
       {error && (
         <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-error/70 hover:text-error">
+          <button onClick={() => setError(null)} aria-label={t.common.dismiss}>
             <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Chat Layout */}
-      <div className="flex h-[calc(100vh-14rem)] rounded-[var(--radius-lg)] border border-border bg-surface overflow-hidden">
-        {/* Conversation List */}
-        <div
-          className={cn(
-            "w-full sm:w-80 shrink-0 border-r border-border flex flex-col",
-            selectedConvId && "hidden sm:flex"
-          )}
-        >
-          {/* Search */}
-          <div className="p-3 border-b border-border">
+      <div className="flex h-[calc(100vh-13rem)] min-h-[520px] overflow-hidden rounded-[var(--radius-lg)] border border-border bg-surface">
+        {/* List */}
+        <div className={cn("flex w-full shrink-0 flex-col border-r border-border sm:w-[340px]", selected && "hidden sm:flex")}>
+          <div className="space-y-3 border-b border-border p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
               <input
-                type="text"
-                placeholder="Search conversations..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none"
+                placeholder={M.search}
+                className="h-10 w-full rounded-full border border-border bg-surface pl-10 pr-4 text-sm focus:border-navy focus:outline-none"
               />
             </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+              {(["all", "unread", "mine", "unassigned", "resolved"] as Filter[]).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={cn(
+                    "flex shrink-0 items-center gap-1 rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
+                    filter === f ? "bg-navy text-white" : "bg-surface-secondary text-text-secondary hover:text-navy"
+                  )}
+                >
+                  {{ all: M.filterAll, unread: M.filterUnread, mine: M.filterMine, unassigned: M.filterUnassigned, resolved: M.filterResolved }[f]}
+                  <span className={cn("text-[10px]", filter === f ? "text-white/70" : "text-text-disabled")}>{counts[f]}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* List */}
-          <div className="flex-1 overflow-y-auto">
-            {filteredConversations.length > 0 ? (
-              filteredConversations.map((conv) => {
-                const convMessages = chatMessages[conv.id] || [];
-                const lastMsg = convMessages[convMessages.length - 1];
-                return (
+          <ul className="flex-1 overflow-y-auto">
+            {conversations === null ? (
+              [0, 1, 2, 3, 4].map((i) => (
+                <li key={i} className="flex gap-3 border-b border-border p-4">
+                  <span className="h-10 w-10 animate-pulse rounded-full bg-surface-secondary" />
+                  <span className="flex-1 space-y-2">
+                    <span className="block h-3 w-2/3 animate-pulse rounded bg-surface-secondary" />
+                    <span className="block h-3 w-1/2 animate-pulse rounded bg-surface-secondary" />
+                  </span>
+                </li>
+              ))
+            ) : filtered.length === 0 ? (
+              <li className="p-8 text-center">
+                <MessageCircle className="mx-auto mb-2 h-8 w-8 text-text-disabled" />
+                <p className="text-sm text-text-secondary">{M.empty}</p>
+              </li>
+            ) : (
+              filtered.map((c) => (
+                <li key={c.id}>
                   <button
-                    key={conv.id}
-                    onClick={() => setSelectedConvId(conv.id)}
+                    onClick={() => select(c.id)}
                     className={cn(
-                      "w-full flex flex-col items-start p-4 border-b border-border text-left transition-colors",
-                      selectedConvId === conv.id
-                        ? "bg-brand-light"
-                        : "hover:bg-surface-secondary/50"
+                      "flex w-full gap-3 border-b border-border p-4 text-left transition-colors",
+                      c.id === selectedId ? "bg-brand-light" : "hover:bg-surface-secondary/60"
                     )}
                   >
-                    <div className="flex items-center justify-between w-full mb-1">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-light text-brand font-semibold text-xs">
-                          {conv.customerName[0]}
-                        </div>
-                        <span className="text-sm font-semibold text-text-primary">
-                          {conv.customerName}
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-light text-sm font-semibold text-brand">
+                      {c.customerName.charAt(0).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className={cn("truncate text-sm", c.unread ? "font-semibold text-navy" : "font-medium text-text-primary")}>
+                          {c.customerName}
                         </span>
-                      </div>
-                      {conv.unreadCount > 0 && (
-                        <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-xs font-bold text-white">
-                          {conv.unreadCount}
+                        <span className="shrink-0 text-[11px] text-text-disabled">{timeAgo(c.lastMessageAt)}</span>
+                      </span>
+                      <span className="block truncate text-xs text-text-secondary">{c.productName ?? topicName(c.subject)}</span>
+                      <span className="mt-1 flex items-center justify-between gap-2">
+                        <span className={cn("truncate text-xs", c.unread ? "text-text-primary" : "text-text-disabled")}>
+                          {c.lastSender && c.lastSender !== "customer" ? M.you : ""}
+                          {c.lastMessage ?? "—"}
                         </span>
-                      )}
-                    </div>
-                    {lastMsg && (
-                      <p className="text-xs text-text-secondary truncate w-full mb-2">
-                        {lastMsg.senderRole === "agent" ? "Agent: " : lastMsg.senderRole === "ai" ? "AI: " : ""}
-                        {lastMsg.isInternalNote && "🔒 "}
-                        {lastMsg.content}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2 w-full">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                          priorityColors[conv.priority]
+                        {c.unread > 0 && (
+                          <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">
+                            {c.unread}
+                          </span>
                         )}
-                      >
-                        {conv.priority}
                       </span>
-                      {conv.assignedAgentId && (
-                        <span className="inline-flex items-center gap-0.5 text-xs text-success">
-                          <UserCheck className="h-2.5 w-2.5" />
-                          Assigned
+                      <span className="mt-1.5 flex items-center gap-1.5">
+                        <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", priorityColors[c.priority])}>
+                          {(M.priorities as Record<string, string>)[c.priority] ?? c.priority}
                         </span>
-                      )}
-                      <span className="text-xs text-text-disabled ml-auto">
-                        {formatTime(conv.lastMessageAt)}
+                        {c.assignedAgentId && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-success">
+                            <UserCheck className="h-3 w-3" />
+                            {c.assignedAgentId === userId ? M.assignedYou : M.assigned}
+                          </span>
+                        )}
                       </span>
-                    </div>
+                    </span>
                   </button>
-                );
-              })
-            ) : (
-              <div className="p-8 text-center">
-                <MessageCircle className="h-8 w-8 text-text-disabled mx-auto mb-2" />
-                <p className="text-sm text-text-secondary">No conversations found.</p>
-              </div>
+                </li>
+              ))
             )}
-          </div>
+          </ul>
         </div>
 
-        {/* Chat Thread */}
-        {selectedConv ? (
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* Chat Header with Controls */}
-            <div className="p-4 border-b border-border space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setSelectedConvId("")}
-                    className="sm:hidden flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary"
-                  >
-                    ←
-                  </button>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-light text-brand font-semibold text-sm">
-                    {selectedConv.customerName[0]}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">
-                      {selectedConv.customerName}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      {selectedConv.assignedAgentId ? (
-                        <span className="inline-flex items-center gap-0.5 text-xs text-success">
-                          <UserCheck className="h-3 w-3" />
-                          Agent assigned
-                        </span>
-                      ) : (
-                        <span className="text-xs text-text-secondary">Awaiting agent</span>
-                      )}
-                    </div>
-                  </div>
+        {/* Thread */}
+        {selected ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="space-y-3 border-b border-border p-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => select(null)}
+                  aria-label={M.back}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary sm:hidden"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-light font-semibold text-brand">
+                  {selected.customerName.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold text-navy">{selected.customerName}</p>
+                  <p className="truncate text-xs text-text-secondary">{topicName(selected.subject)}</p>
                 </div>
+                {selected.productSlug && (
+                  <Link
+                    href={`/products/${selected.productSlug}`}
+                    target="_blank"
+                    className="hidden items-center gap-2 rounded-full border border-border py-1 pl-1 pr-3 text-xs text-text-primary hover:border-navy/30 md:flex"
+                  >
+                    <span className="relative h-7 w-7 overflow-hidden rounded-full bg-surface-secondary">
+                      {selected.productImage ? (
+                        <Image src={selected.productImage} alt="" fill sizes="28px" className="object-cover" />
+                      ) : (
+                        <Package className="m-1.5 h-4 w-4 text-text-disabled" />
+                      )}
+                    </span>
+                    <span className="max-w-[160px] truncate">{selected.productName}</span>
+                    <ExternalLink className="h-3 w-3 text-text-disabled" />
+                  </Link>
+                )}
               </div>
 
-              {/* Staff Controls */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* Priority Selector */}
-                <div className="flex items-center gap-1">
+                <label className="flex items-center gap-1">
                   <Flag className="h-3.5 w-3.5 text-text-disabled" />
                   <select
-                    value={selectedConv.priority.toLowerCase()}
-                    onChange={(e) => handlePriorityChange(selectedConv.id, e.target.value)}
+                    value={selected.priority}
                     disabled={isPending}
-                    className="h-7 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs font-medium focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      run(() => updateConversationPriority(selected.id, v), () => patch(selected.id, { priority: v }));
+                    }}
+                    aria-label={M.priority}
+                    className="h-8 cursor-pointer rounded-full border border-border bg-surface px-3 text-xs font-medium focus:border-navy focus:outline-none disabled:opacity-50"
                   >
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
+                    {["low", "normal", "high", "urgent"].map((p) => (
+                      <option key={p} value={p}>
+                        {(M.priorities as Record<string, string>)[p]}
+                      </option>
+                    ))}
                   </select>
-                </div>
-
-                {/* Status Selector */}
-                <div className="flex items-center gap-1">
+                </label>
+                <label className="flex items-center gap-1">
                   <CheckCheck className="h-3.5 w-3.5 text-text-disabled" />
                   <select
-                    value="open"
-                    onChange={(e) => handleStatusChange(selectedConv.id, e.target.value)}
+                    value={selected.status}
                     disabled={isPending}
-                    className="h-7 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs font-medium focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      run(() => updateConversationStatus(selected.id, v), () => patch(selected.id, { status: v }));
+                    }}
+                    aria-label={M.status}
+                    className="h-8 cursor-pointer rounded-full border border-border bg-surface px-3 text-xs font-medium focus:border-navy focus:outline-none disabled:opacity-50"
                   >
-                    <option value="open">Open</option>
-                    <option value="pending_agent">Pending Agent</option>
-                    <option value="resolved">Resolved</option>
-                    <option value="closed">Closed</option>
+                    {Object.entries(M.statuses).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
-                </div>
-
-                {/* Assign to me */}
-                <button
-                  onClick={() => handleAssign(selectedConv.id, null)}
-                  disabled={isPending}
-                  className="flex h-7 items-center gap-1 rounded-[var(--radius-sm)] border border-border px-2 text-xs font-medium text-text-primary hover:bg-surface-secondary disabled:opacity-50"
-                >
-                  <UserCheck className="h-3 w-3" />
-                  {selectedConv.assignedAgentId ? "Reassign" : "Assign to me"}
-                </button>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-surface-secondary/30">
-              {selectedMessages.length > 0 ? (
-                selectedMessages.map((msg) => {
-                  const isAgent = msg.senderRole === "agent";
-                  const isAI = msg.senderRole === "ai";
-                  const isInternal = msg.isInternalNote;
-                  return (
-                    <div
-                      key={msg.id}
-                      className={cn(
-                        "flex gap-3",
-                        isAgent && !isInternal ? "flex-row" : "flex-row-reverse"
-                      )}
-                    >
-                      {/* Avatar */}
-                      <div
-                        className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                          isAgent && !isInternal
-                            ? "bg-surface border border-border text-text-secondary"
-                            : isAI
-                              ? "bg-navy text-white"
-                              : "bg-brand text-white"
-                        )}
-                      >
-                        {isAgent && !isInternal ? (
-                          <Headphones className="h-4 w-4" />
-                        ) : isAI ? (
-                          <Bot className="h-4 w-4" />
-                        ) : (
-                          <User className="h-4 w-4" />
-                        )}
-                      </div>
-
-                      {/* Message Bubble */}
-                      <div
-                        className={cn(
-                          "max-w-[75%] sm:max-w-[60%]",
-                          isAgent && !isInternal ? "items-start" : "items-end"
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-semibold text-text-primary">
-                            {isAgent && !isInternal
-                              ? "Support Agent"
-                              : isAI
-                                ? "AI Assistant"
-                                : "Customer"}
-                          </span>
-                          {isInternal && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/10 px-1.5 py-0.5 text-[10px] font-medium text-warning">
-                              <Lock className="h-2.5 w-2.5" />
-                              Internal
-                            </span>
-                          )}
-                          <span className="text-xs text-text-disabled">
-                            {new Date(msg.createdAt).toLocaleTimeString("en-US", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </div>
-                        <div
-                          className={cn(
-                            "rounded-[var(--radius-md)] px-4 py-2.5 text-sm",
-                            isInternal
-                              ? "bg-warning/10 border border-warning/20 text-text-primary rounded-tl-sm"
-                              : isAgent
-                                ? "bg-surface border border-border text-text-primary rounded-tl-sm"
-                                : isAI
-                                  ? "bg-navy text-white rounded-tr-sm"
-                                  : "bg-brand text-white rounded-tr-sm"
-                          )}
-                        >
-                          {msg.content}
-                        </div>
-                        {msg.attachments.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            {msg.attachments.map((att) => (
-                              <a
-                                key={att}
-                                href={att}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={cn(
-                                  "flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-sm)] text-xs transition-colors",
-                                  isAgent
-                                    ? "bg-surface border border-border text-text-secondary hover:bg-surface-secondary"
-                                    : "bg-brand/10 text-brand hover:bg-brand/20"
-                                )}
-                              >
-                                <Paperclip className="h-3 w-3" />
-                                {att.split("/").pop() || "Attachment"}
-                              </a>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <div className="text-center">
-                    <MessageCircle className="h-8 w-8 text-text-disabled mx-auto mb-2" />
-                    <p className="text-sm text-text-secondary">No messages yet. Start the conversation.</p>
-                  </div>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="p-3 border-t border-border bg-surface space-y-2">
-              {/* Internal Note Toggle */}
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsInternalNote(!isInternalNote)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium transition-colors",
-                    isInternalNote
-                      ? "bg-warning/10 text-warning border border-warning/20"
-                      : "text-text-secondary hover:bg-surface-secondary border border-border"
-                  )}
-                >
-                  <Lock className="h-3 w-3" />
-                  {isInternalNote ? "Internal note (hidden from customer)" : "Toggle internal note"}
-                </button>
-              </div>
-
-              {/* Message Input */}
-              <div className="flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary transition-colors disabled:opacity-50"
-                >
-                  <Paperclip className="h-5 w-5" />
-                </button>
-                <input
-                  type="text"
-                  placeholder={isInternalNote ? "Type an internal note..." : "Type your reply..."}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
+                </label>
+                {selected.assignedAgentId === userId ? (
+                  <button
+                    disabled={isPending}
+                    onClick={() =>
+                      run(() => assignConversationToMe(selected.id, true), () => patch(selected.id, { assignedAgentId: null }))
                     }
-                  }}
-                  className={cn(
-                    "flex-1 h-10 rounded-[var(--radius-input)] border bg-surface px-4 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none transition-all",
-                    isInternalNote
-                      ? "border-warning/30 focus:border-warning focus:ring-2 focus:ring-warning/20"
-                      : "border-border focus:border-brand focus:ring-2 focus:ring-brand/20"
-                  )}
-                />
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || sending || isUploading}
-                  className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
-                    isInternalNote ? "bg-warning hover:bg-warning/90" : "bg-brand hover:bg-brand-hover"
-                  )}
-                >
-                  <Send className="h-5 w-5" />
-                </button>
+                    className="flex h-8 items-center gap-1 rounded-full border border-success/30 bg-success/10 px-3 text-xs font-medium text-success disabled:opacity-50"
+                  >
+                    <UserCheck className="h-3.5 w-3.5" /> {M.releaseMine}
+                  </button>
+                ) : (
+                  <button
+                    disabled={isPending}
+                    onClick={() =>
+                      run(() => assignConversationToMe(selected.id), () => patch(selected.id, { assignedAgentId: userId }))
+                    }
+                    className="flex h-8 items-center gap-1 rounded-full border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary disabled:opacity-50"
+                  >
+                    <UserCheck className="h-3.5 w-3.5" />
+                    {selected.assignedAgentId ? M.takeOver : M.assignMe}
+                  </button>
+                )}
+                {selected.status !== "resolved" && (
+                  <button
+                    disabled={isPending}
+                    onClick={() =>
+                      run(() => updateConversationStatus(selected.id, "resolved"), () => patch(selected.id, { status: "resolved" }))
+                    }
+                    className="ml-auto flex h-8 items-center gap-1 rounded-full bg-navy px-3 text-xs font-semibold text-white hover:bg-navy-light disabled:opacity-50"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" /> {M.markResolved}
+                  </button>
+                )}
               </div>
-              {isUploading && (
-                <p className="text-xs text-text-disabled">Uploading file...</p>
-              )}
             </div>
+
+            <ChatThread
+              key={selected.id}
+              conversationId={selected.id}
+              viewer="staff"
+              allowInternalNotes
+              autoFocus
+              placeholder={M.replyPlaceholder}
+            />
           </div>
         ) : (
-          <div className="hidden sm:flex flex-1 items-center justify-center">
+          <div className="hidden flex-1 items-center justify-center sm:flex">
             <div className="text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mx-auto mb-4">
+              <span className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary">
                 <MessageCircle className="h-8 w-8 text-text-disabled" />
-              </div>
-              <h3 className="text-lg font-semibold text-navy mb-1">
-                Select a conversation
-              </h3>
-              <p className="text-text-secondary text-sm">
-                Choose a conversation from the list to view messages and respond.
-              </p>
+              </span>
+              <h3 className="text-lg font-semibold text-navy">{M.selectTitle}</h3>
+              <p className="mt-1 text-sm text-text-secondary">{M.selectText}</p>
             </div>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+export default function AdminMessagesPage() {
+  return (
+    <Suspense fallback={null}>
+      <StaffInbox />
+    </Suspense>
   );
 }

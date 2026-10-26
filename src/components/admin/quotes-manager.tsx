@@ -6,6 +6,8 @@ import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
 import { respondToQuote, updateQuoteStatus } from "@/app/actions/crud";
 import type { QuoteRequest, QuoteStatus } from "@/types";
+import { useI18n } from "@/i18n/client";
+import { countryName } from "@/i18n/names";
 
 const statusConfig: Record<QuoteStatus, { color: string; icon: typeof Clock }> = {
   Submitted: { color: "bg-info/10 text-info border-info/20", icon: Clock },
@@ -24,12 +26,15 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [respondingTo, setRespondingTo] = useState<QuoteRequest | null>(null);
+  const { t, format, formatDate, formatNumber } = useI18n();
+  const Q = t.admin.quotes;
+  const C = t.admin.common;
 
   function handleStartReview(quoteId: string) {
     startTransition(async () => {
       const result = await updateQuoteStatus(quoteId, "under_review");
       if (!result.success) {
-        setError(result.error || "Failed to update quote status");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -48,7 +53,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
         setRespondingTo(null);
         window.location.reload();
       } else {
-        setError(result.error || "Failed to send quote response");
+        setError(result.error || C.failed);
       }
     });
   }
@@ -57,7 +62,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
     startTransition(async () => {
       const result = await updateQuoteStatus(quoteId, "accepted");
       if (!result.success) {
-        setError(result.error || "Failed to update quote status");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -68,7 +73,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
     startTransition(async () => {
       const result = await updateQuoteStatus(quoteId, "rejected");
       if (!result.success) {
-        setError(result.error || "Failed to update quote status");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -78,9 +83,9 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy tracking-tight">Quote Queue</h1>
+        <h1 className="text-2xl font-bold text-navy tracking-tight">{Q.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Review and respond to customer quote requests.
+          {Q.lead}
         </p>
       </div>
 
@@ -106,14 +111,14 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                       <h3 className="text-sm font-semibold text-text-primary">{quote.productName}</h3>
                       <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold", config.color)}>
                         <StatusIcon className="h-3 w-3" />
-                        {quote.status}
+                        {(t.status.quote as Record<string, string>)[quote.status] ?? quote.status}
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-text-secondary flex-wrap">
-                      <span>Qty: <span className="font-medium text-text-primary">{quote.quantity.toLocaleString()}</span></span>
-                      {quote.targetPrice > 0 && <span>Target: <span className="font-medium text-text-primary">{formatPrice(quote.targetPrice)}/unit</span></span>}
-                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{quote.destinationCountry}</span>
-                      <span>{new Date(quote.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                      <span>{Q.qty} <span className="font-medium text-text-primary">{formatNumber(quote.quantity)}</span></span>
+                      {quote.targetPrice > 0 && <span>{Q.target} <span className="font-medium text-text-primary">{format(C.perUnit, { price: formatPrice(quote.targetPrice) })}</span></span>}
+                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{countryName(t, quote.destinationCountry)}</span>
+                      <span>{formatDate(quote.createdAt, { month: "short", day: "numeric" })}</span>
                     </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -124,7 +129,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                         className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-50"
                       >
                         <Clock className="h-3.5 w-3.5" />
-                        Start Review
+                        {Q.startReview}
                       </button>
                     )}
                     {(quote.status === "Submitted" || quote.status === "Under Review") && (
@@ -134,7 +139,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                         className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
                       >
                         <Send className="h-3.5 w-3.5" />
-                        Send Quote
+                        {Q.sendQuote}
                       </button>
                     )}
                     {quote.status === "Quoted" && (
@@ -145,7 +150,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                           className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-success px-4 text-xs font-semibold text-white hover:bg-success/90 transition-colors disabled:opacity-50"
                         >
                           <CheckCircle className="h-3.5 w-3.5" />
-                          Mark Accepted
+                          {Q.markAccepted}
                         </button>
                         <button
                           onClick={() => handleReject(quote.id)}
@@ -153,7 +158,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                           className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-error/20 px-4 text-xs font-medium text-error hover:bg-error/5 transition-colors disabled:opacity-50"
                         >
                           <XCircle className="h-3.5 w-3.5" />
-                          Reject
+                          {Q.reject}
                         </button>
                       </>
                     )}
@@ -166,7 +171,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
       ) : (
         <Card className="p-12 text-center">
           <FileText className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-          <p className="text-sm text-text-secondary">No quote requests found.</p>
+          <p className="text-sm text-text-secondary">{Q.none}</p>
         </Card>
       )}
 
@@ -176,11 +181,12 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
           <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-lg font-bold text-navy">Send Quote Response</h2>
+                <h2 className="text-lg font-bold text-navy">{Q.modalTitle}</h2>
                 <p className="text-sm text-text-secondary mt-1">{respondingTo.productName}</p>
               </div>
               <button
                 onClick={() => setRespondingTo(null)}
+                aria-label={C.close}
                 className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary"
               >
                 <X className="h-4 w-4" />
@@ -190,17 +196,17 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
             <div className="mb-4 rounded-[var(--radius-sm)] border border-border bg-surface-secondary/30 p-4 text-sm">
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <span className="text-text-secondary">Quantity:</span>{" "}
-                  <span className="font-medium text-text-primary">{respondingTo.quantity.toLocaleString()} units</span>
+                  <span className="text-text-secondary">{Q.quantity}</span>{" "}
+                  <span className="font-medium text-text-primary">{format(C.units, { n: formatNumber(respondingTo.quantity) })}</span>
                 </div>
                 <div>
-                  <span className="text-text-secondary">Destination:</span>{" "}
-                  <span className="font-medium text-text-primary">{respondingTo.destinationCountry}</span>
+                  <span className="text-text-secondary">{Q.destination}</span>{" "}
+                  <span className="font-medium text-text-primary">{countryName(t, respondingTo.destinationCountry)}</span>
                 </div>
                 {respondingTo.targetPrice > 0 && (
                   <div>
-                    <span className="text-text-secondary">Target Price:</span>{" "}
-                    <span className="font-medium text-text-primary">{formatPrice(respondingTo.targetPrice)}/unit</span>
+                    <span className="text-text-secondary">{Q.targetPrice}</span>{" "}
+                    <span className="font-medium text-text-primary">{format(C.perUnit, { price: formatPrice(respondingTo.targetPrice) })}</span>
                   </div>
                 )}
               </div>
@@ -209,7 +215,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
             <form action={handleRespond} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Quoted Price (USD/unit)</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{Q.quotedPrice}</label>
                   <input
                     type="number"
                     name="quotedPrice"
@@ -221,7 +227,7 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Delivery Days</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{Q.deliveryDays}</label>
                   <input
                     type="number"
                     name="deliveryDays"
@@ -233,12 +239,12 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Response Message</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{Q.message}</label>
                 <textarea
                   name="staffResponse"
                   rows={4}
                   required
-                  placeholder="Enter your quote details, terms, and any additional information for the customer..."
+                  placeholder={Q.messagePlaceholder}
                   className="w-full rounded-[var(--radius-input)] border border-border bg-surface px-4 py-2 text-sm focus:border-brand focus:outline-none"
                 />
               </div>
@@ -249,14 +255,14 @@ export function QuotesManager({ quotes }: QuotesManagerProps) {
                   onClick={() => setRespondingTo(null)}
                   className="flex h-10 items-center rounded-[var(--radius-button)] border border-border px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
                 >
-                  Cancel
+                  {C.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
                   className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
                 >
-                  {isPending ? "Sending..." : "Send Quote"}
+                  {isPending ? Q.sending : Q.sendQuote}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>

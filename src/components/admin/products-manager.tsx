@@ -24,11 +24,12 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
-  uploadProductImages,
-  uploadProductVideo,
   deleteProductVideo,
 } from "@/app/actions/crud";
 import type { Product, Category, SubCategory, PriceTier } from "@/types";
+import { uploadProductImage, uploadProductVideoFile, type MediaResult } from "@/lib/product-media";
+import { useI18n } from "@/i18n/client";
+import { categoryName, subCategoryName } from "@/i18n/names";
 
 interface ProductsManagerProps {
   products: Product[];
@@ -42,14 +43,21 @@ export function ProductsManager({
   subCategories,
 }: ProductsManagerProps) {
   const { formatPrice: formatCurrencyPrice } = useCurrency();
+  const { t, format } = useI18n();
+  const P = t.adminCatalog.products;
+  const C = t.admin.common;
+  const stock = t.catalog.stock as Record<string, string>;
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
-  // Sync local state when server component re-renders with fresh data
-  useEffect(() => {
+  // When the server sends a fresh list (after router.refresh), start from it.
+  // Done during render rather than in an effect, which would render twice.
+  const [syncedFrom, setSyncedFrom] = useState(initialProducts);
+  if (syncedFrom !== initialProducts) {
+    setSyncedFrom(initialProducts);
     setProducts(initialProducts);
-  }, [initialProducts]);
+  }
   const [showForm, setShowForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -132,16 +140,24 @@ export function ProductsManager({
   }
 
   function handleDelete(productId: string) {
-    if (!confirm("Are you sure you want to delete this product? It will be deactivated.")) return;
+    if (!confirm(P.confirmDelete)) return;
     startTransition(async () => {
       const result = await deleteProduct(productId);
       if (result.success) {
         setProducts((prev) => prev.filter((p) => p.id !== productId));
       } else {
-        setError(result.error || "Failed to delete product");
+        setError(result.error || C.failed);
       }
     });
   }
+
+  const mediaError = useCallback(
+    (result: Exclude<MediaResult, { url: string }>, name: string) => {
+      if (result.error === "failed") return `${name}: ${result.detail ?? C.failed}`;
+      return format(P[result.error], { name });
+    },
+    [P, C.failed, format]
+  );
 
   // --- Image upload handlers ---
 
@@ -152,25 +168,23 @@ export function ProductsManager({
     setError(null);
 
     try {
-      const fileArray = Array.from(files);
-      const result = await uploadProductImages(fileArray);
-
-      if (result.success && result.data?.urls) {
-        setImageUrls((prev) => [...prev, ...result.data!.urls]);
+      // Straight to Supabase Storage, one file at a time (no server size limit).
+      const problems: string[] = [];
+      for (const file of Array.from(files)) {
+        const result = await uploadProductImage(file);
+        if ("url" in result) setImageUrls((prev) => [...prev, result.url]);
+        else problems.push(mediaError(result, file.name));
       }
-
-      if (result.error) {
-        setError(result.error);
-      }
+      if (problems.length) setError(problems.join(" "));
     } catch {
-      setError("Failed to upload images. Please try again.");
+      setError(P.uploadImagesFailed);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     }
-  }, []);
+  }, [P.uploadImagesFailed, mediaError]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -222,21 +236,18 @@ export function ProductsManager({
     setError(null);
 
     try {
-      const result = await uploadProductVideo(file);
-      if (result.success && result.data?.url) {
-        setVideoUrl(result.data.url);
-      } else {
-        setError(result.error || "Failed to upload video");
-      }
+      const result = await uploadProductVideoFile(file);
+      if ("url" in result) setVideoUrl(result.url);
+      else setError(mediaError(result, file.name));
     } catch {
-      setError("Failed to upload video. Please try again.");
+      setError(P.uploadVideoFailed);
     } finally {
       setIsUploadingVideo(false);
       if (videoInputRef.current) {
         videoInputRef.current.value = "";
       }
     }
-  }, []);
+  }, [P.uploadVideoFailed, mediaError]);
 
   async function handleRemoveVideo() {
     if (!videoUrl) return;
@@ -249,7 +260,7 @@ export function ProductsManager({
       if (result.success) {
         setVideoUrl(null);
       } else {
-        setError(result.error || "Failed to remove video");
+        setError(result.error || C.failed);
       }
     });
   }
@@ -343,7 +354,7 @@ export function ProductsManager({
           setShowForm(false);
           setEditingProduct(null);
         } else {
-          setError(result.error || "Failed to update product");
+          setError(result.error || C.failed);
         }
       } else {
         const result = await createProduct(input);
@@ -352,7 +363,7 @@ export function ProductsManager({
           setShowForm(false);
           window.location.reload();
         } else {
-          setError(result.error || "Failed to create product");
+          setError(result.error || C.failed);
         }
       }
     });
@@ -362,9 +373,9 @@ export function ProductsManager({
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Products</h1>
+          <h1 className="text-2xl font-bold text-navy tracking-tight">{P.title}</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Manage your product catalog, pricing, and inventory.
+            {P.lead}
           </p>
         </div>
         <div className="flex gap-2">
@@ -373,7 +384,7 @@ export function ProductsManager({
             className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Product
+            {P.add}
           </button>
         </div>
       </div>
@@ -381,7 +392,7 @@ export function ProductsManager({
       {error && (
         <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-error/70 hover:text-error">
+          <button onClick={() => setError(null)} aria-label={C.dismiss} className="text-error/70 hover:text-error">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -392,7 +403,7 @@ export function ProductsManager({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
           <input
             type="text"
-            placeholder="Search products..."
+            placeholder={P.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
@@ -403,9 +414,9 @@ export function ProductsManager({
           onChange={(e) => setCategoryFilter(e.target.value)}
           className="h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
         >
-          <option value="all">All Categories</option>
+          <option value="all">{P.allCategories}</option>
           {categories.map((c) => (
-            <option key={c.id} value={c.slug}>{c.name}</option>
+            <option key={c.id} value={c.slug}>{categoryName(t, c.slug, c.name)}</option>
           ))}
         </select>
       </div>
@@ -415,12 +426,12 @@ export function ProductsManager({
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface-secondary/50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">Product</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden sm:table-cell">Category</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">Price</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden md:table-cell">Stock</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden lg:table-cell">Rating</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">{P.colProduct}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden sm:table-cell">{P.colCategory}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">{P.colPrice}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden md:table-cell">{P.colStock}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden lg:table-cell">{P.colRating}</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">{C.actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -440,20 +451,20 @@ export function ProductsManager({
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-text-primary truncate max-w-[200px]">{product.name}</p>
-                          <p className="text-xs text-text-secondary">MOQ: {product.moq}</p>
+                          <p className="text-xs text-text-secondary">{format(P.moq, { n: product.moq })}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <span className="text-sm text-text-secondary">{product.category}</span>
+                      <span className="text-sm text-text-secondary">{categoryName(t, product.categorySlug, product.category)}</span>
                       {product.subCategory && (
-                        <span className="text-xs text-text-disabled block">{product.subCategory}</span>
+                        <span className="text-xs text-text-disabled block">{subCategoryName(t, product.subCategorySlug, product.subCategory)}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-sm font-semibold text-navy">{formatCurrencyPrice(product.priceTiers[0]?.price ?? 0)}</p>
                       {product.priceTiers.length > 1 && (
-                        <p className="text-xs text-text-secondary">to {formatCurrencyPrice(product.priceTiers[product.priceTiers.length - 1]?.price ?? 0)}</p>
+                        <p className="text-xs text-text-secondary">{format(P.to, { price: formatCurrencyPrice(product.priceTiers[product.priceTiers.length - 1]?.price ?? 0) })}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
@@ -463,7 +474,7 @@ export function ProductsManager({
                         product.stockStatus === "Low Stock" ? "bg-warning/10 text-warning" :
                         "bg-surface-secondary text-text-secondary"
                       )}>
-                        {product.stockStatus}
+                        {stock[product.stockStatus] ?? product.stockStatus}
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
@@ -477,6 +488,7 @@ export function ProductsManager({
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => openEditForm(product)}
+                          aria-label={C.edit}
                           className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-brand"
                         >
                           <Edit2 className="h-3.5 w-3.5" />
@@ -484,6 +496,7 @@ export function ProductsManager({
                         <button
                           onClick={() => handleDelete(product.id)}
                           disabled={isPending}
+                          aria-label={C.delete}
                           className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-error disabled:opacity-50"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -496,7 +509,7 @@ export function ProductsManager({
                 <tr>
                   <td colSpan={6} className="px-4 py-12 text-center">
                     <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-                    <p className="text-sm text-text-secondary">No products found. Add your first product to get started.</p>
+                    <p className="text-sm text-text-secondary">{P.none}</p>
                   </td>
                 </tr>
               )}
@@ -511,10 +524,11 @@ export function ProductsManager({
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-navy">
-                {editingProduct ? "Edit Product" : "Add Product"}
+                {editingProduct ? P.editTitle : P.add}
               </h2>
               <button
                 onClick={closeForm}
+                aria-label={C.close}
                 className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary"
               >
                 <X className="h-4 w-4" />
@@ -524,7 +538,7 @@ export function ProductsManager({
             <form action={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Product Name</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.name}</label>
                   <input
                     type="text"
                     name="name"
@@ -534,19 +548,19 @@ export function ProductsManager({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Slug (optional)</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.slug}</label>
                   <input
                     type="text"
                     name="slug"
                     defaultValue={editingProduct?.slug || ""}
-                    placeholder="auto-generated from name"
+                    placeholder={P.slugPlaceholder}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Description</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.description}</label>
                 <textarea
                   name="description"
                   defaultValue={editingProduct?.description || ""}
@@ -559,7 +573,7 @@ export function ProductsManager({
               {/* Category & Sub-Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Category</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.category}</label>
                   <select
                     name="category"
                     defaultValue={editingProduct?.category || ""}
@@ -571,14 +585,14 @@ export function ProductsManager({
                     required
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
                   >
-                    <option value="">Select category</option>
+                    <option value="">{P.selectCategory}</option>
                     {categories.map((c) => (
-                      <option key={c.id} value={c.name}>{c.name}</option>
+                      <option key={c.id} value={c.name}>{categoryName(t, c.slug, c.name)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Sub-Category (optional)</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.subCategory}</label>
                   <select
                     name="subCategorySlug"
                     value={selectedSubCategorySlug}
@@ -586,20 +600,20 @@ export function ProductsManager({
                     disabled={!selectedCategoryId || availableSubCategories.length === 0}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
                   >
-                    <option value="">No sub-category</option>
+                    <option value="">{P.noSubCategory}</option>
                     {availableSubCategories.map((sc) => (
-                      <option key={sc.id} value={sc.slug}>{sc.name}</option>
+                      <option key={sc.id} value={sc.slug}>{subCategoryName(t, sc.slug, sc.name)}</option>
                     ))}
                   </select>
                   {!selectedCategoryId && (
-                    <p className="text-xs text-text-disabled mt-1">Select a category first</p>
+                    <p className="text-xs text-text-disabled mt-1">{P.categoryFirst}</p>
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Origin Country</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.origin}</label>
                   <input
                     type="text"
                     name="originCountry"
@@ -608,7 +622,7 @@ export function ProductsManager({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Stock Quantity</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.stockQuantity}</label>
                   <input
                     type="number"
                     name="stockQuantity"
@@ -622,9 +636,9 @@ export function ProductsManager({
               {/* Image Upload Section */}
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Product Images
+                  {P.images}
                   {imageUrls.length > 0 && (
-                    <span className="ml-1 text-text-disabled">({imageUrls.length} image{imageUrls.length !== 1 ? "s" : ""})</span>
+                    <span className="ml-1 text-text-disabled">{format(P.imageCount, { n: imageUrls.length })}</span>
                   )}
                 </label>
 
@@ -641,15 +655,15 @@ export function ProductsManager({
                   {isUploading ? (
                     <>
                       <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-                      <p className="text-xs text-text-secondary">Uploading images...</p>
+                      <p className="text-xs text-text-secondary">{P.uploadingImages}</p>
                     </>
                   ) : (
                     <>
                       <Upload className="h-6 w-6 text-text-disabled" />
                       <p className="text-xs text-text-secondary text-center">
-                        <span className="font-medium text-brand">Click to upload</span> or drag and drop
+                        <span className="font-medium text-brand">{P.clickUpload}</span> {P.orDrag}
                       </p>
-                      <p className="text-xs text-text-disabled">PNG, JPG, WebP up to 10MB each</p>
+                      <p className="text-xs text-text-disabled">{P.imageFormats}</p>
                     </>
                   )}
                 </div>
@@ -673,14 +687,14 @@ export function ProductsManager({
                         >
                           <Image
                             src={url}
-                            alt={`Product image ${index + 1}`}
+                            alt={format(P.imageAlt, { n: index + 1 })}
                             fill
                             sizes="96px"
                             className="object-cover"
                           />
                           {index === 0 && (
                             <div className="absolute bottom-0 left-0 right-0 bg-brand/90 px-1 py-0.5 text-center text-[10px] font-semibold text-white">
-                              Main
+                              {P.main}
                             </div>
                           )}
                           <button
@@ -689,6 +703,7 @@ export function ProductsManager({
                               e.stopPropagation();
                               removeImage(index);
                             }}
+                            aria-label={P.removeImage}
                             className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-navy/70 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-error"
                           >
                             <X className="h-3 w-3" />
@@ -701,6 +716,7 @@ export function ProductsManager({
                                 moveImageLeft(index);
                               }}
                               disabled={index === 0}
+                              aria-label={P.moveLeft}
                               className="flex h-5 w-5 items-center justify-center rounded bg-navy/70 text-white hover:bg-navy disabled:opacity-30"
                             >
                               <ChevronLeft className="h-3 w-3" />
@@ -712,6 +728,7 @@ export function ProductsManager({
                                 moveImageRight(index);
                               }}
                               disabled={index === imageUrls.length - 1}
+                              aria-label={P.moveRight}
                               className="flex h-5 w-5 items-center justify-center rounded bg-navy/70 text-white hover:bg-navy disabled:opacity-30"
                             >
                               <ChevronRight className="h-3 w-3" />
@@ -721,7 +738,7 @@ export function ProductsManager({
                       ))}
                     </div>
                     <p className="text-xs text-text-disabled">
-                      Drag arrows to reorder. First image is the main display image.
+                      {P.reorderHint}
                     </p>
                   </div>
                 )}
@@ -740,7 +757,7 @@ export function ProductsManager({
                           addManualUrl();
                         }
                       }}
-                      placeholder="Paste an image URL (e.g. https://images.unsplash.com/...)"
+                      placeholder={P.urlPlaceholder}
                       className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
                     />
                   </div>
@@ -750,7 +767,7 @@ export function ProductsManager({
                     disabled={!manualUrl.trim()}
                     className="flex h-10 items-center rounded-[var(--radius-button)] border border-border px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-50"
                   >
-                    Add URL
+                    {P.addUrl}
                   </button>
                 </div>
               </div>
@@ -758,7 +775,7 @@ export function ProductsManager({
               {/* Video Upload Section */}
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Product Video (optional)
+                  {P.video}
                 </label>
 
                 {videoUrl ? (
@@ -773,13 +790,14 @@ export function ProductsManager({
                         type="button"
                         onClick={handleRemoveVideo}
                         disabled={isPending}
+                        aria-label={P.removeVideo}
                         className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-navy/70 text-white hover:bg-error transition-colors disabled:opacity-50"
                       >
                         <Trash className="h-3.5 w-3.5" />
                       </button>
                     </div>
                     <p className="text-xs text-text-disabled">
-                      Video uploaded. Click trash icon to remove.
+                      {P.videoUploaded}
                     </p>
                   </div>
                 ) : (
@@ -793,15 +811,15 @@ export function ProductsManager({
                     {isUploadingVideo ? (
                       <>
                         <div className="h-6 w-6 animate-spin rounded-full border-2 border-brand border-t-transparent" />
-                        <p className="text-xs text-text-secondary">Uploading video...</p>
+                        <p className="text-xs text-text-secondary">{P.uploadingVideo}</p>
                       </>
                     ) : (
                       <>
                         <Video className="h-6 w-6 text-text-disabled" />
                         <p className="text-xs text-text-secondary text-center">
-                          <span className="font-medium text-brand">Click to upload</span> a product video
+                          <span className="font-medium text-brand">{P.clickUpload}</span> {P.aVideo}
                         </p>
-                        <p className="text-xs text-text-disabled">MP4, WebM up to 100MB</p>
+                        <p className="text-xs text-text-disabled">{P.videoFormats}</p>
                       </>
                     )}
                   </div>
@@ -818,7 +836,7 @@ export function ProductsManager({
               {/* MOQ */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Minimum Order Quantity (MOQ)</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.moqLabel}</label>
                   <input
                     type="number"
                     name="moq"
@@ -839,16 +857,16 @@ export function ProductsManager({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Stock Status</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.stockStatus}</label>
                   <select
                     name="stockStatus"
                     defaultValue={editingProduct?.stockStatus || "In Stock"}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
                   >
-                    <option value="In Stock">In Stock</option>
-                    <option value="Low Stock">Low Stock</option>
-                    <option value="Out of Stock">Out of Stock</option>
-                    <option value="Pre-Order">Pre-Order</option>
+                    <option value="In Stock">{stock["In Stock"]}</option>
+                    <option value="Low Stock">{stock["Low Stock"]}</option>
+                    <option value="Out of Stock">{stock["Out of Stock"]}</option>
+                    <option value="Pre-Order">{stock["Pre-Order"]}</option>
                   </select>
                 </div>
               </div>
@@ -857,8 +875,8 @@ export function ProductsManager({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-xs font-medium text-text-secondary">
-                    Price Tiers
-                    <span className="ml-1 text-text-disabled">({priceTiers.length} tier{priceTiers.length !== 1 ? "s" : ""})</span>
+                    {P.tiers}
+                    <span className="ml-1 text-text-disabled">{format(P.tierCount, { n: priceTiers.length })}</span>
                   </label>
                   <button
                     type="button"
@@ -866,7 +884,7 @@ export function ProductsManager({
                     className="flex h-7 items-center gap-1 rounded-[var(--radius-sm)] border border-border px-2 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
                   >
                     <Plus className="h-3 w-3" />
-                    Add Tier
+                    {P.addTier}
                   </button>
                 </div>
 
@@ -877,7 +895,7 @@ export function ProductsManager({
                       className="grid grid-cols-12 gap-2 items-center rounded-[var(--radius-sm)] border border-border bg-surface-secondary/30 p-2"
                     >
                       <div className="col-span-3">
-                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">Min Qty</label>
+                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">{P.minQty}</label>
                         <input
                           type="number"
                           value={tier.minQuantity}
@@ -887,7 +905,7 @@ export function ProductsManager({
                         />
                       </div>
                       <div className="col-span-3">
-                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">Max Qty</label>
+                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">{P.maxQty}</label>
                         <input
                           type="number"
                           value={tier.maxQuantity ?? ""}
@@ -898,7 +916,7 @@ export function ProductsManager({
                         />
                       </div>
                       <div className="col-span-3">
-                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">Price (USD)</label>
+                        <label className="block text-[10px] font-medium text-text-disabled mb-0.5">{P.price}</label>
                         <input
                           type="number"
                           value={tier.price}
@@ -913,6 +931,7 @@ export function ProductsManager({
                           type="button"
                           onClick={() => removePriceTier(index)}
                           disabled={priceTiers.length === 1}
+                          aria-label={P.removeTier}
                           className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-30"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -922,7 +941,7 @@ export function ProductsManager({
                   ))}
                 </div>
                 <p className="text-xs text-text-disabled mt-1.5">
-                  Define bulk pricing tiers. Leave Max Qty empty for "∞" (no upper limit). First tier min qty auto-syncs with MOQ.
+                  {P.tiersHint}
                 </p>
               </div>
 
@@ -935,7 +954,7 @@ export function ProductsManager({
                     defaultChecked={editingProduct?.featured || false}
                     className="h-4 w-4 rounded border-border"
                   />
-                  Featured Product
+                  {P.featured}
                 </label>
               </div>
 
@@ -945,14 +964,14 @@ export function ProductsManager({
                   onClick={closeForm}
                   className="flex h-10 items-center rounded-[var(--radius-button)] border border-border px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
                 >
-                  Cancel
+                  {C.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={isPending || isUploading || isUploadingVideo}
                   className="flex h-10 items-center rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
                 >
-                  {isPending ? "Saving..." : isUploading ? "Uploading images..." : isUploadingVideo ? "Uploading video..." : editingProduct ? "Update Product" : "Create Product"}
+                  {isPending ? C.saving : isUploading ? P.uploadingImages : isUploadingVideo ? P.uploadingVideo : editingProduct ? P.update : P.create}
                 </button>
               </div>
             </form>

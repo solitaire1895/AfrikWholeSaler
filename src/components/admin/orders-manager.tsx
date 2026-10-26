@@ -2,11 +2,15 @@
 
 import { useState, useTransition } from "react";
 import Image from "next/image";
-import { Search, Package, ChevronDown } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Search, Package, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
 import { updateOrderStatus } from "@/app/actions/crud";
+import { confirmOrderPrice } from "@/app/actions/cart";
 import type { Order, OrderStatus, Customer } from "@/types";
+import { useI18n } from "@/i18n/client";
 
 const statusColors: Record<OrderStatus, string> = {
   Pending: "bg-warning/10 text-warning border-warning/20",
@@ -52,12 +56,20 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  // Status picked in this session, shown right away while the server catches up.
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, OrderStatus>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const router = useRouter();
+  const { t, format, formatDate } = useI18n();
+  const A = t.admin.orders;
+  const statusLabel = (st: string) => (t.status.order as Record<string, string>)[st] ?? st;
 
   const customerMap = new Map(customers.map((c) => [c.id, c]));
 
+  const statusOf = (o: Order) => statusOverrides[o.id] ?? o.status;
+
   const filtered = orders.filter((o) => {
-    if (statusFilter !== "All" && o.status !== statusFilter) return false;
+    if (statusFilter !== "All" && statusOf(o) !== statusFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const customer = customerMap.get(o.customerId);
@@ -70,24 +82,44 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
     return true;
   });
 
-  function handleStatusChange(orderId: string, newStatus: OrderStatus) {
-    setOpenDropdown(null);
+  // "Price on request" orders: staff enter the final total so the customer can pay.
+  function handleSetPrice(orderId: string, raw: string) {
+    const amount = Number(raw.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError(A.invalidTotal);
+      return;
+    }
     startTransition(async () => {
-      const result = await updateOrderStatus(orderId, dbStatusMap[newStatus]);
+      const result = await confirmOrderPrice(orderId, amount);
+      if (!result.success) setError(result.error || t.admin.common.failed);
+      else window.location.reload();
+    });
+  }
+
+  function handleStatusChange(order: Order, newStatus: OrderStatus) {
+    const previous = statusOf(order);
+    if (newStatus === previous) return;
+    setError(null);
+    setSavingId(order.id);
+    setStatusOverrides((s) => ({ ...s, [order.id]: newStatus }));
+    startTransition(async () => {
+      const result = await updateOrderStatus(order.id, dbStatusMap[newStatus]);
       if (!result.success) {
-        setError(result.error || "Failed to update order status");
+        setStatusOverrides((s) => ({ ...s, [order.id]: previous }));
+        setError(result.error || t.admin.common.failed);
       } else {
-        window.location.reload();
+        router.refresh();
       }
+      setSavingId(null);
     });
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy tracking-tight">Orders</h1>
+        <h1 className="text-2xl font-bold text-navy tracking-tight">{A.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Manage all customer orders and update their status.
+          {A.lead}
         </p>
       </div>
 
@@ -102,7 +134,7 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
           <input
             type="text"
-            placeholder="Search by order number or customer..."
+            placeholder={A.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
@@ -115,7 +147,7 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
         >
           {["All", ...allStatuses].map((s) => (
             <option key={s} value={s}>
-              {s === "All" ? "All Statuses" : s}
+              {s === "All" ? t.admin.common.allStatuses : statusLabel(s)}
             </option>
           ))}
         </select>
@@ -126,13 +158,13 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface-secondary/50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Order</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden sm:table-cell">Customer</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden sm:table-cell">Items</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Total</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden md:table-cell">Date</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{A.colOrder}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden sm:table-cell">{A.colCustomer}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden sm:table-cell">{A.colItems}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{A.colTotal}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{t.admin.common.status}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden md:table-cell">{A.colDate}</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{t.admin.common.actions}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -142,7 +174,9 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
                   return (
                     <tr key={order.id} className="hover:bg-surface-secondary/30">
                       <td className="px-4 py-3">
-                        <p className="text-sm font-semibold text-text-primary">{order.orderNumber}</p>
+                        <Link href={`/admin/orders/${order.id}`} className="text-sm font-semibold text-brand hover:underline">
+                          {order.orderNumber}
+                        </Link>
                         <p className="text-xs text-text-secondary">{order.customerId.slice(0, 8)}...</p>
                       </td>
                       <td className="px-4 py-3 hidden sm:table-cell">
@@ -162,48 +196,70 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
                               </div>
                             )}
                           </div>
-                          <span className="text-sm text-text-secondary">{order.items.length} items</span>
+                          <span className="text-sm text-text-secondary">{format(A.items, { n: order.items.length })}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-sm font-bold text-navy">{formatPrice(order.totalAmount, order.currency)}</p>
+                        {order.awaitingPrice ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const input = e.currentTarget.elements.namedItem("total") as HTMLInputElement;
+                              handleSetPrice(order.id, input.value);
+                            }}
+                            className="flex items-center gap-1.5"
+                          >
+                            <input
+                              name="total"
+                              inputMode="decimal"
+                              placeholder={A.totalPlaceholder}
+                              aria-label={format(A.setTotalFor, { order: order.orderNumber })}
+                              className="h-8 w-24 rounded-[var(--radius-sm)] border border-gold/40 bg-gold-light px-2 text-xs focus:border-brand focus:outline-none"
+                            />
+                            <button
+                              type="submit"
+                              disabled={isPending}
+                              className="h-8 rounded-[var(--radius-sm)] bg-navy px-2.5 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              {A.setPrice}
+                            </button>
+                          </form>
+                        ) : (
+                          <p className="text-sm font-bold text-navy">{formatPrice(order.totalAmount, order.currency)}</p>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold", statusColors[order.status])}>
-                          {order.status}
+                        <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold", statusColors[statusOf(order)])}>
+                          {statusLabel(statusOf(order))}
                         </span>
+                        {order.paymentStatus === "partial" && (
+                          <span className="ml-1.5 inline-flex items-center rounded-full bg-gold-light px-2 py-0.5 text-xs font-semibold text-navy">
+                            {(t.status.payment as Record<string, string>).partial}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 hidden md:table-cell">
                         <span className="text-sm text-text-secondary">
-                          {new Date(order.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          {formatDate(order.createdAt, { month: "short", day: "numeric" })}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right relative">
-                        <button
-                          onClick={() => setOpenDropdown(openDropdown === order.id ? null : order.id)}
-                          disabled={isPending}
-                          className="inline-flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary disabled:opacity-50"
-                        >
-                          Update Status
-                          <ChevronDown className="h-3 w-3" />
-                        </button>
-                        {openDropdown === order.id && (
-                          <div className="absolute right-4 top-full mt-1 z-10 w-44 rounded-[var(--radius-sm)] border border-border bg-surface shadow-[var(--shadow-card)] py-1">
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          {savingId === order.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />}
+                          <select
+                            value={statusOf(order)}
+                            onChange={(e) => handleStatusChange(order, e.target.value as OrderStatus)}
+                            disabled={savingId === order.id}
+                            aria-label={`${A.updateStatus} — ${order.orderNumber}`}
+                            className="h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs font-medium text-text-primary focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
+                          >
                             {allStatuses.map((status) => (
-                              <button
-                                key={status}
-                                onClick={() => handleStatusChange(order.id, status)}
-                                className={cn(
-                                  "flex w-full items-center px-3 py-2 text-xs font-medium hover:bg-surface-secondary transition-colors",
-                                  order.status === status ? "text-brand" : "text-text-primary"
-                                )}
-                              >
-                                {status}
-                                {order.status === status && <span className="ml-auto">✓</span>}
-                              </button>
+                              <option key={status} value={status}>
+                                {statusLabel(status)}
+                              </option>
                             ))}
-                          </div>
-                        )}
+                          </select>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -212,7 +268,7 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center">
                     <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-                    <p className="text-sm text-text-secondary">No orders found.</p>
+                    <p className="text-sm text-text-secondary">{A.none}</p>
                   </td>
                 </tr>
               )}

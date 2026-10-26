@@ -7,12 +7,16 @@ import {
   ArrowLeft,
   Star,
 } from "lucide-react";
+import { getT } from "@/i18n/server";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
-export default function AuthLayout({
+export default async function AuthLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const t = await getT();
+  const L = t.auth.layout;
   return (
     <div className="min-h-screen flex">
       {/* Left Panel — Brand Visual (hidden on mobile) */}
@@ -40,30 +44,18 @@ export default function AuthLayout({
           {/* Main Content */}
           <div className="max-w-md">
             <h1 className="text-3xl xl:text-4xl font-bold leading-tight mb-4">
-              Source quality products from China with total confidence
+              {L.title}
             </h1>
             <p className="text-white/60 text-base leading-relaxed mb-8">
-              Join 3,500+ African businesses sourcing smarter with AfrikWholesaler.
+              {L.lead}
             </p>
 
             {/* Trust Features */}
             <div className="space-y-4">
               {[
-                {
-                  icon: ShieldCheck,
-                  title: "Quality Inspected",
-                  desc: "Every product checked before shipping",
-                },
-                {
-                  icon: Truck,
-                  title: "End-to-End Logistics",
-                  desc: "From factory to your doorstep",
-                },
-                {
-                  icon: Lock,
-                  title: "Secure Payments",
-                  desc: "Milestone-based payment protection",
-                },
+                { icon: ShieldCheck, title: L.f1Title, desc: L.f1Text },
+                { icon: Truck, title: L.f2Title, desc: L.f2Text },
+                { icon: Lock, title: L.f3Title, desc: L.f3Text },
               ].map((feature) => (
                 <div key={feature.title} className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-white/10">
@@ -86,14 +78,13 @@ export default function AuthLayout({
               ))}
             </div>
             <p className="text-white/70 text-sm leading-relaxed italic">
-              &ldquo;AfrikWholesaler transformed our import business. The quality
-              inspection means we receive exactly what we ordered, every time.&rdquo;
+              {L.quote}
             </p>
             <p className="mt-3 text-sm font-semibold text-white">
               Amadou Diallo
             </p>
             <p className="text-xs text-white/50">
-              Diallo Distribution SARL, Senegal
+              {L.quoteCompany}
             </p>
           </div>
         </div>
@@ -102,7 +93,7 @@ export default function AuthLayout({
       {/* Right Panel — Form */}
       <div className="flex-1 flex flex-col bg-background">
         {/* Mobile Logo + Back Link */}
-        <div className="flex items-center justify-between p-6 lg:hidden">
+        <div className="flex items-center justify-between gap-2 p-6 lg:hidden">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] gradient-primary">
               <Package className="h-5 w-5 text-white" />
@@ -111,23 +102,25 @@ export default function AuthLayout({
               Afrik<span className="text-brand">Wholesaler</span>
             </span>
           </Link>
+          <LanguageSwitcher />
           <Link
             href="/"
             className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-brand transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Home
+            {L.home}
           </Link>
         </div>
 
         {/* Desktop Back Link */}
-        <div className="hidden lg:flex items-center justify-end p-6">
+        <div className="hidden lg:flex items-center justify-end gap-2 p-6">
+          <LanguageSwitcher />
           <Link
             href="/"
             className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-brand transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            Back to home
+            {L.backHome}
           </Link>
         </div>
 

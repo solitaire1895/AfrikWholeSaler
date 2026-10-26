@@ -19,45 +19,45 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Checkbox,
-  Divider,
-  SocialButton,
   PasswordStrength,
 } from "@/components/ui/auth-helpers";
 import { createClient } from "@/lib/supabase/client";
+import { useI18n } from "@/i18n/client";
+import { intlLocale } from "@/i18n/config";
+import { authErrorMessage } from "@/i18n/auth-errors";
 
-const countryGroups: { region: string; countries: string[] }[] = [
+// ISO 3166 codes; names are shown in the visitor's language with
+// Intl.DisplayNames, and stored in English as before.
+const countryGroups: { region: "Africa" | "Europe" | "North America" | "South America" | "Asia" | "Middle East" | "Oceania"; codes: string[] }[] = [
   {
     region: "Africa",
-    countries: ["Senegal", "Nigeria", "Cameroon", "Kenya", "Ghana", "Ivory Coast", "South Africa", "Egypt", "Morocco", "Tanzania", "Ethiopia", "Uganda", "Algeria", "Tunisia", "Mozambique", "DR Congo", "Rwanda", "Zambia", "Zimbabwe", "Botswana", "Madagascar", "Mali", "Burkina Faso", "Benin", "Togo", "Gabon", "Congo", "Mauritius", "Namibia", "Angola"],
+    codes: ["SN", "NG", "CM", "KE", "GH", "CI", "ZA", "EG", "MA", "TZ", "ET", "UG", "DZ", "TN", "MZ", "CD", "RW", "ZM", "ZW", "BW", "MG", "ML", "BF", "BJ", "TG", "GA", "CG", "MU", "NA", "AO", "TD", "NE", "GN", "CF"],
   },
   {
     region: "Europe",
-    countries: ["Germany", "France", "United Kingdom", "Italy", "Spain", "Netherlands", "Belgium", "Switzerland", "Poland", "Sweden", "Norway", "Denmark", "Finland", "Portugal", "Austria", "Ireland", "Czech Republic", "Greece", "Romania", "Hungary", "Croatia", "Bulgaria", "Slovakia", "Ukraine", "Lithuania", "Latvia", "Estonia"],
+    codes: ["DE", "FR", "GB", "IT", "ES", "NL", "BE", "CH", "PL", "SE", "NO", "DK", "FI", "PT", "AT", "IE", "CZ", "GR", "RO", "HU", "HR", "BG", "SK", "UA", "LT", "LV", "EE"],
   },
   {
     region: "North America",
-    countries: ["United States", "Canada", "Mexico", "Guatemala", "Panama", "Costa Rica", "Dominican Republic", "Honduras", "Jamaica", "Cuba", "El Salvador", "Trinidad and Tobago", "Bahamas", "Barbados"],
+    codes: ["US", "CA", "MX", "GT", "PA", "CR", "DO", "HN", "JM", "CU", "SV", "TT", "BS", "BB"],
   },
-  {
-    region: "South America",
-    countries: ["Brazil", "Argentina", "Colombia", "Chile", "Peru", "Venezuela", "Ecuador", "Bolivia", "Paraguay", "Uruguay", "Guyana", "Suriname"],
-  },
+  { region: "South America", codes: ["BR", "AR", "CO", "CL", "PE", "VE", "EC", "BO", "PY", "UY", "GY", "SR"] },
   {
     region: "Asia",
-    countries: ["China", "India", "Vietnam", "Thailand", "Indonesia", "Malaysia", "Philippines", "Japan", "South Korea", "Bangladesh", "Pakistan", "Sri Lanka", "Cambodia", "Myanmar", "Taiwan", "Singapore", "Hong Kong"],
+    codes: ["CN", "IN", "VN", "TH", "ID", "MY", "PH", "JP", "KR", "BD", "PK", "LK", "KH", "MM", "TW", "SG", "HK"],
   },
-  {
-    region: "Middle East",
-    countries: ["Turkey", "United Arab Emirates", "Saudi Arabia", "Israel", "Qatar", "Kuwait", "Oman", "Jordan", "Lebanon", "Bahrain"],
-  },
-  {
-    region: "Oceania",
-    countries: ["Australia", "New Zealand", "Fiji"],
-  },
+  { region: "Middle East", codes: ["TR", "AE", "SA", "IL", "QA", "KW", "OM", "JO", "LB", "BH"] },
+  { region: "Oceania", codes: ["AU", "NZ", "FJ"] },
 ];
+
+const englishNames = new Intl.DisplayNames(["en"], { type: "region" });
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { t, locale } = useI18n();
+  const R = t.auth.register;
+  const E = t.auth.errors;
+  const localNames = new Intl.DisplayNames([intlLocale[locale]], { type: "region" });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
@@ -81,18 +81,17 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
-    if (!formData.firstName) newErrors.firstName = "First name is required";
-    if (!formData.lastName) newErrors.lastName = "Last name is required";
-    if (!formData.email) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "Invalid email format";
-    if (!formData.company) newErrors.company = "Company name is required";
-    if (!formData.phone) newErrors.phone = "Phone number is required";
-    if (!formData.country) newErrors.country = "Please select your country";
-    if (!formData.password) newErrors.password = "Password is required";
-    else if (formData.password.length < 8) newErrors.password = "Password must be at least 8 characters";
-    if (formData.password !== formData.confirmPassword)
-      newErrors.confirmPassword = "Passwords do not match";
-    if (!agreeToTerms) newErrors.terms = "You must agree to the terms to continue";
+    if (!formData.firstName) newErrors.firstName = E.firstNameRequired;
+    if (!formData.lastName) newErrors.lastName = E.lastNameRequired;
+    if (!formData.email) newErrors.email = E.emailRequired;
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = E.emailInvalid;
+    if (!formData.company) newErrors.company = E.companyRequired;
+    if (!formData.phone) newErrors.phone = E.phoneRequired;
+    if (!formData.country) newErrors.country = E.countryRequired;
+    if (!formData.password) newErrors.password = E.passwordRequired;
+    else if (formData.password.length < 8) newErrors.password = E.passwordShort;
+    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = E.passwordMismatch;
+    if (!agreeToTerms) newErrors.terms = E.termsRequired;
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
@@ -114,12 +113,12 @@ export default function RegisterPage() {
         });
 
         if (error) {
-          setErrors({ general: error.message });
+          setErrors({ general: authErrorMessage(t, error.message) });
         } else if (data.user) {
           // If email confirmation is required, show a message.
           // If not, redirect to dashboard.
           if (data.session) {
-            router.push("/dashboard");
+            router.push("/products");
             router.refresh();
           } else {
             // Email confirmation required — redirect to login with notice
@@ -127,7 +126,7 @@ export default function RegisterPage() {
           }
         }
       } catch {
-        setErrors({ general: "An unexpected error occurred. Please try again." });
+        setErrors({ general: E.unexpected });
       } finally {
         setLoading(false);
       }
@@ -139,27 +138,19 @@ export default function RegisterPage() {
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-navy tracking-tight mb-2">
-          Create your account
+          {R.title}
         </h2>
         <p className="text-sm text-text-secondary">
-          Start sourcing quality products from China with confidence
+          {R.lead}
         </p>
       </div>
-
-      {/* Social Signup */}
-      <div className="grid grid-cols-2 gap-3 mb-2">
-        <SocialButton provider="google" />
-        <SocialButton provider="apple" />
-      </div>
-
-      <Divider label="or sign up with email" />
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Name Row */}
         <div className="grid grid-cols-2 gap-3">
           <Input
-            label="First name"
+            label={R.firstName}
             type="text"
             name="firstName"
             placeholder="John"
@@ -170,7 +161,7 @@ export default function RegisterPage() {
             autoComplete="given-name"
           />
           <Input
-            label="Last name"
+            label={R.lastName}
             type="text"
             name="lastName"
             placeholder="Doe"
@@ -183,7 +174,7 @@ export default function RegisterPage() {
 
         {/* Email */}
         <Input
-          label="Business email"
+          label={R.email}
           type="email"
           name="email"
           placeholder="you@company.com"
@@ -196,10 +187,10 @@ export default function RegisterPage() {
 
         {/* Company */}
         <Input
-          label="Company name"
+          label={R.company}
           type="text"
           name="company"
-          placeholder="Your Business Ltd"
+          placeholder={R.companyPlaceholder}
           icon={<Building className="h-4 w-4" />}
           value={formData.company}
           onChange={(e) => handleChange("company", e.target.value)}
@@ -209,7 +200,7 @@ export default function RegisterPage() {
         {/* Phone + Country */}
         <div className="grid grid-cols-2 gap-3">
           <Input
-            label="Phone number"
+            label={R.phone}
             type="tel"
             name="phone"
             placeholder="+237 6XX XXX XXX"
@@ -221,7 +212,7 @@ export default function RegisterPage() {
           />
           <div className="w-full">
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              Country
+              {R.country}
             </label>
             <div className="relative">
               <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-text-disabled pointer-events-none" />
@@ -236,15 +227,18 @@ export default function RegisterPage() {
                 } ${!formData.country && "text-text-disabled"}`}
               >
                 <option value="" disabled>
-                  Select country
+                  {R.selectCountry}
                 </option>
                 {countryGroups.map((group) => (
-                  <optgroup key={group.region} label={group.region}>
-                    {group.countries.map((country) => (
-                      <option key={country} value={country} className="text-text-primary">
-                        {country}
-                      </option>
-                    ))}
+                  <optgroup key={group.region} label={R.regions[group.region]}>
+                    {group.codes
+                      .map((code) => ({ value: englishNames.of(code) ?? code, label: localNames.of(code) ?? code }))
+                      .sort((a, b) => a.label.localeCompare(b.label, intlLocale[locale]))
+                      .map((c) => (
+                        <option key={c.value} value={c.value} className="text-text-primary">
+                          {c.label}
+                        </option>
+                      ))}
                   </optgroup>
                 ))}
               </select>
@@ -260,10 +254,10 @@ export default function RegisterPage() {
         {/* Password */}
         <div className="relative">
           <Input
-            label="Password"
+            label={R.password}
             type={showPassword ? "text" : "password"}
             name="password"
-            placeholder="Create a strong password"
+            placeholder={R.passwordPlaceholder}
             icon={<Lock className="h-4 w-4" />}
             value={formData.password}
             onChange={(e) => handleChange("password", e.target.value)}
@@ -275,21 +269,21 @@ export default function RegisterPage() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3.5 top-[34px] text-text-disabled hover:text-text-secondary transition-colors"
-              aria-label="Toggle password visibility"
+              aria-label={R.togglePassword}
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           )}
-          <PasswordStrength password={formData.password} />
+          <PasswordStrength password={formData.password} labels={t.auth.strength} />
         </div>
 
         {/* Confirm Password */}
         <div className="relative">
           <Input
-            label="Confirm password"
+            label={R.confirm}
             type={showConfirm ? "text" : "password"}
             name="confirmPassword"
-            placeholder="Re-enter your password"
+            placeholder={R.confirmPlaceholder}
             icon={<Lock className="h-4 w-4" />}
             value={formData.confirmPassword}
             onChange={(e) => handleChange("confirmPassword", e.target.value)}
@@ -301,7 +295,7 @@ export default function RegisterPage() {
               type="button"
               onClick={() => setShowConfirm(!showConfirm)}
               className="absolute right-3.5 top-[34px] text-text-disabled hover:text-text-secondary transition-colors"
-              aria-label="Toggle confirm password visibility"
+              aria-label={R.toggleConfirm}
             >
               {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
@@ -316,13 +310,13 @@ export default function RegisterPage() {
             onChange={setAgreeToTerms}
             label={
               <>
-                I agree to the{" "}
+                {R.agreeBefore}{" "}
                 <Link href="/terms" className="font-medium text-brand hover:text-brand-hover">
-                  Terms of Service
+                  {R.terms}
                 </Link>{" "}
-                and{" "}
+                {R.agreeAnd}{" "}
                 <Link href="/privacy" className="font-medium text-brand hover:text-brand-hover">
-                  Privacy Policy
+                  {R.privacy}
                 </Link>
               </>
             }
@@ -346,11 +340,11 @@ export default function RegisterPage() {
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Creating account...
+              {R.creating}
             </>
           ) : (
             <>
-              Create Account
+              {R.create}
               <ArrowRight className="h-4 w-4" />
             </>
           )}
@@ -359,12 +353,12 @@ export default function RegisterPage() {
 
       {/* Footer Link */}
       <p className="mt-6 text-center text-sm text-text-secondary">
-        Already have an account?{" "}
+        {R.haveAccount}{" "}
         <Link
           href="/login"
           className="font-semibold text-brand hover:text-brand-hover transition-colors"
         >
-          Sign in
+          {R.signIn}
         </Link>
       </p>
     </div>

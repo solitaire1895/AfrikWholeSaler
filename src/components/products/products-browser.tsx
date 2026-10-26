@@ -8,6 +8,8 @@ import { Footer } from "@/components/layout/footer";
 import { ProductCard } from "@/components/product/product-card";
 import { cn } from "@/lib/utils";
 import type { Product, Category, SubCategory, StockStatus } from "@/types";
+import { useI18n } from "@/i18n/client";
+import { categoryName, subCategoryName } from "@/i18n/names";
 
 const stockStatuses: StockStatus[] = [
   "In Stock",
@@ -26,6 +28,8 @@ export function ProductsBrowser({
   subCategories: SubCategory[];
 }) {
   const searchParams = useSearchParams();
+  const { t, format } = useI18n();
+  const L = t.catalog.list;
   const initialCategory = searchParams.get("category") || "all";
   const initialFilter = searchParams.get("filter") || "all";
 
@@ -110,11 +114,11 @@ export function ProductsBrowser({
     return subCategories.filter((sc) => sc.categorySlug === selectedCategory);
   }, [selectedCategory, subCategories]);
 
+  const activeCategory = categories.find((c) => c.slug === selectedCategory);
   const activeCategoryName =
-    selectedCategory === "all"
-      ? "All Products"
-      : categories.find((c) => c.slug === selectedCategory)?.name ||
-        "All Products";
+    selectedCategory === "all" || !activeCategory
+      ? L.allProducts
+      : categoryName(t, activeCategory.slug, activeCategory.name);
 
   return (
     <>
@@ -125,17 +129,16 @@ export function ProductsBrowser({
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
             <div className="flex items-center gap-2 text-sm text-text-secondary mb-2">
               <Package className="h-4 w-4" />
-              <span>Home</span>
+              <span>{L.home}</span>
               <span>/</span>
-              <span className="text-text-primary font-medium">Products</span>
+              <span className="text-text-primary font-medium">{L.products}</span>
             </div>
             <h1 className="text-3xl font-bold text-navy tracking-tight">
               {activeCategoryName}
             </h1>
             <p className="mt-2 text-text-secondary">
-              Browse our catalog of quality-sourced products from China.{" "}
-              {filteredProducts.length}{" "}
-              {filteredProducts.length === 1 ? "product" : "products"} found.
+              {L.lead}{" "}
+              {filteredProducts.length === 1 ? L.foundOne : format(L.found, { n: filteredProducts.length })}
             </p>
           </div>
         </div>
@@ -147,7 +150,7 @@ export function ProductsBrowser({
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
               <input
                 type="text"
-                placeholder="Search products..."
+                placeholder={L.searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 transition-all"
@@ -166,17 +169,17 @@ export function ProductsBrowser({
               onChange={(e) => setSortBy(e.target.value)}
               className="h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm text-text-primary focus:border-brand focus:outline-none cursor-pointer"
             >
-              <option value="featured">Sort: Featured</option>
-              <option value="price-low">Price: Low to High</option>
-              <option value="price-high">Price: High to Low</option>
-              <option value="rating">Top Rated</option>
+              <option value="featured">{L.sortFeatured}</option>
+              <option value="price-low">{L.sortPriceLow}</option>
+              <option value="price-high">{L.sortPriceHigh}</option>
+              <option value="rating">{L.sortRating}</option>
             </select>
             <button
               onClick={() => setShowFilters(!showFilters)}
               className="flex h-11 items-center gap-2 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors lg:hidden"
             >
               <SlidersHorizontal className="h-4 w-4" />
-              Filters
+              {L.filters}
             </button>
           </div>
 
@@ -191,7 +194,7 @@ export function ProductsBrowser({
               {/* Categories */}
               <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
                 <h3 className="text-sm font-semibold text-navy mb-3">
-                  Categories
+                  {L.categories}
                 </h3>
                 <div className="space-y-1">
                     <button
@@ -206,7 +209,7 @@ export function ProductsBrowser({
                           : "text-text-secondary hover:bg-surface-secondary"
                       )}
                     >
-                      All Categories
+                      {L.allCategories}
                     </button>
                     {categories.map((cat) => (
                       <button
@@ -222,7 +225,7 @@ export function ProductsBrowser({
                             : "text-text-secondary hover:bg-surface-secondary"
                         )}
                       >
-                        {cat.name}
+                        {categoryName(t, cat.slug, cat.name)}
                         <span className="text-text-disabled ml-1">
                           ({cat.productCount})
                         </span>
@@ -235,7 +238,7 @@ export function ProductsBrowser({
                 {availableSubCategories.length > 0 && (
                   <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
                     <h3 className="text-sm font-semibold text-navy mb-3">
-                      Sub-Categories
+                      {L.subCategories}
                     </h3>
                     <div className="space-y-1">
                       <button
@@ -247,7 +250,7 @@ export function ProductsBrowser({
                             : "text-text-secondary hover:bg-surface-secondary"
                         )}
                       >
-                        All Sub-Categories
+                        {L.allSubCategories}
                       </button>
                       {availableSubCategories.map((subCat) => (
                         <button
@@ -260,7 +263,7 @@ export function ProductsBrowser({
                               : "text-text-secondary hover:bg-surface-secondary"
                           )}
                         >
-                          {subCat.name}
+                          {subCategoryName(t, subCat.slug, subCat.name)}
                           <span className="text-text-disabled ml-1">
                             ({subCat.productCount})
                           </span>
@@ -273,7 +276,7 @@ export function ProductsBrowser({
               {/* Stock Status */}
               <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
                 <h3 className="text-sm font-semibold text-navy mb-3">
-                  Availability
+                  {L.availability}
                 </h3>
                 <div className="space-y-1">
                   <button
@@ -285,7 +288,7 @@ export function ProductsBrowser({
                         : "text-text-secondary hover:bg-surface-secondary"
                     )}
                   >
-                    All
+                    {L.all}
                   </button>
                   {stockStatuses.map((status) => (
                     <button
@@ -298,7 +301,7 @@ export function ProductsBrowser({
                           : "text-text-secondary hover:bg-surface-secondary"
                       )}
                     >
-                      {status}
+                      {t.catalog.stock[status]}
                     </button>
                   ))}
                 </div>
@@ -319,11 +322,10 @@ export function ProductsBrowser({
                     <Search className="h-8 w-8 text-text-disabled" />
                   </div>
                   <h3 className="text-lg font-semibold text-navy mb-1">
-                    No products found
+                    {L.emptyTitle}
                   </h3>
                   <p className="text-text-secondary text-sm">
-                    Try adjusting your search or filters to find what you're
-                    looking for.
+                    {L.emptyText}
                   </p>
                   <button
                     onClick={() => {
@@ -334,7 +336,7 @@ export function ProductsBrowser({
                     }}
                     className="mt-4 text-sm font-medium text-brand hover:text-brand-hover"
                   >
-                    Clear all filters
+                    {L.clearFilters}
                   </button>
                 </div>
               )}

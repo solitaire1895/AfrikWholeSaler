@@ -21,6 +21,7 @@ import {
   deletePurchaseRequest,
 } from "@/app/actions/crud";
 import type { PurchaseRequest } from "@/lib/queries";
+import { useI18n } from "@/i18n/client";
 
 interface PurchaseRequestsManagerProps {
   purchaseRequests: PurchaseRequest[];
@@ -35,23 +36,7 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-error/10 text-error",
 };
 
-const statusLabels: Record<string, string> = {
-  draft: "Draft",
-  sourcing: "Sourcing",
-  negotiating: "Negotiating",
-  ordered: "Ordered",
-  received: "Received",
-  cancelled: "Cancelled",
-};
-
-const statusOptions = [
-  { value: "draft", label: "Draft" },
-  { value: "sourcing", label: "Sourcing" },
-  { value: "negotiating", label: "Negotiating" },
-  { value: "ordered", label: "Ordered" },
-  { value: "received", label: "Received" },
-  { value: "cancelled", label: "Cancelled" },
-];
+const statusValues = ["draft", "sourcing", "negotiating", "ordered", "received", "cancelled"] as const;
 
 export function PurchaseRequestsManager({
   purchaseRequests: initialPRs,
@@ -63,6 +48,11 @@ export function PurchaseRequestsManager({
   const [editingPR, setEditingPR] = useState<PurchaseRequest | null>(null);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const { t, format, formatNumber, formatDate } = useI18n();
+  const P = t.admin.purchase;
+  const C = t.admin.common;
+  const statusOptions = statusValues.map((value) => ({ value, label: P.statuses[value] }));
+  const fmtDay = (iso: string) => formatDate(iso, { month: "short", day: "numeric", year: "numeric" });
 
   const filtered = purchaseRequests.filter((pr) => {
     if (statusFilter !== "All" && pr.status !== statusFilter) return false;
@@ -96,13 +86,13 @@ export function PurchaseRequestsManager({
   }
 
   function handleDelete(prId: string) {
-    if (!confirm("Are you sure you want to delete this purchase request?")) return;
+    if (!confirm(P.confirmDelete)) return;
     startTransition(async () => {
       const result = await deletePurchaseRequest(prId);
       if (result.success) {
         setPurchaseRequests((prev) => prev.filter((p) => p.id !== prId));
       } else {
-        setError(result.error || "Failed to delete purchase request");
+        setError(result.error || C.failed);
       }
     });
   }
@@ -133,7 +123,7 @@ export function PurchaseRequestsManager({
           closeForm();
           window.location.reload();
         } else {
-          setError(result.error || "Failed to update purchase request");
+          setError(result.error || C.failed);
         }
       } else {
         const result = await createPurchaseRequest(input);
@@ -141,7 +131,7 @@ export function PurchaseRequestsManager({
           closeForm();
           window.location.reload();
         } else {
-          setError(result.error || "Failed to create purchase request");
+          setError(result.error || C.failed);
         }
       }
     });
@@ -155,7 +145,7 @@ export function PurchaseRequestsManager({
           prev.map((p) => (p.id === prId ? { ...p, status: newStatus } : p))
         );
       } else {
-        setError(result.error || "Failed to update status");
+        setError(result.error || C.failed);
       }
     });
   }
@@ -173,9 +163,9 @@ export function PurchaseRequestsManager({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Purchase Requests</h1>
+          <h1 className="text-2xl font-bold text-navy tracking-tight">{P.title}</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Internal procurement tracking — bridge customer quotes to factory sourcing.
+            {P.lead}
           </p>
         </div>
         <button
@@ -183,7 +173,7 @@ export function PurchaseRequestsManager({
           className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
         >
           <Plus className="h-4 w-4" />
-          New Purchase Request
+          {P.add}
         </button>
       </div>
 
@@ -191,7 +181,7 @@ export function PurchaseRequestsManager({
       {error && (
         <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-error/70 hover:text-error">
+          <button onClick={() => setError(null)} aria-label={C.dismiss} className="text-error/70 hover:text-error">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -200,19 +190,19 @@ export function PurchaseRequestsManager({
       {/* Summary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Total PRs</p>
+          <p className="text-xs text-text-secondary">{P.total}</p>
           <p className="text-lg font-bold text-navy">{stats.total}</p>
         </div>
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Sourcing</p>
+          <p className="text-xs text-text-secondary">{P.statuses.sourcing}</p>
           <p className="text-lg font-bold text-info">{stats.sourcing}</p>
         </div>
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Negotiating</p>
+          <p className="text-xs text-text-secondary">{P.statuses.negotiating}</p>
           <p className="text-lg font-bold text-warning">{stats.negotiating}</p>
         </div>
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Ordered</p>
+          <p className="text-xs text-text-secondary">{P.statuses.ordered}</p>
           <p className="text-lg font-bold text-brand">{stats.ordered}</p>
         </div>
       </div>
@@ -223,7 +213,7 @@ export function PurchaseRequestsManager({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
           <input
             type="text"
-            placeholder="Search by PR number, product, or factory..."
+            placeholder={P.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
@@ -234,7 +224,7 @@ export function PurchaseRequestsManager({
           onChange={(e) => setStatusFilter(e.target.value)}
           className="h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
         >
-          <option value="All">All Statuses</option>
+          <option value="All">{C.allStatuses}</option>
           {statusOptions.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
@@ -250,28 +240,28 @@ export function PurchaseRequestsManager({
             <thead>
               <tr className="border-b border-border bg-surface-secondary/50">
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  PR Number
+                  {P.colNumber}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Product
+                  {P.colProduct}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Qty
+                  {P.colQty}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Target Price
+                  {P.colTarget}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Factory
+                  {P.colFactory}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Status
+                  {C.status}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Expected
+                  {P.colExpected}
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Actions
+                  {C.actions}
                 </th>
               </tr>
             </thead>
@@ -285,11 +275,7 @@ export function PurchaseRequestsManager({
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-navy">{pr.prNumber}</p>
                     <p className="text-xs text-text-disabled">
-                      {new Date(pr.createdAt).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })}
+                      {fmtDay(pr.createdAt)}
                     </p>
                   </td>
 
@@ -308,7 +294,7 @@ export function PurchaseRequestsManager({
                   {/* Quantity */}
                   <td className="px-4 py-3">
                     <p className="text-sm font-medium text-text-primary">
-                      {pr.quantity.toLocaleString()}
+                      {formatNumber(pr.quantity)}
                     </p>
                   </td>
 
@@ -323,7 +309,7 @@ export function PurchaseRequestsManager({
                     )}
                     {pr.factoryQuotedPrice && (
                       <p className="text-xs text-success">
-                        Factory: ${pr.factoryQuotedPrice.toFixed(2)}
+                        {format(P.factoryPrice, { price: `$${pr.factoryQuotedPrice.toFixed(2)}` })}
                       </p>
                     )}
                   </td>
@@ -338,7 +324,7 @@ export function PurchaseRequestsManager({
                         )}
                       </div>
                     ) : (
-                      <span className="text-xs text-text-disabled">Not assigned</span>
+                      <span className="text-xs text-text-disabled">{P.notAssigned}</span>
                     )}
                   </td>
 
@@ -362,14 +348,10 @@ export function PurchaseRequestsManager({
                   <td className="px-4 py-3">
                     {pr.expectedDeliveryDate ? (
                       <p className="text-xs text-text-secondary">
-                        {new Date(pr.expectedDeliveryDate).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {fmtDay(pr.expectedDeliveryDate)}
                       </p>
                     ) : (
-                      <span className="text-xs text-text-disabled">TBD</span>
+                      <span className="text-xs text-text-disabled">{P.tbd}</span>
                     )}
                   </td>
 
@@ -379,6 +361,7 @@ export function PurchaseRequestsManager({
                       <button
                         onClick={() => openEditForm(pr)}
                         disabled={isPending}
+                        aria-label={C.edit}
                         className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-brand disabled:opacity-50"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
@@ -386,6 +369,7 @@ export function PurchaseRequestsManager({
                       <button
                         onClick={() => handleDelete(pr.id)}
                         disabled={isPending}
+                        aria-label={C.delete}
                         className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-error disabled:opacity-50"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
@@ -401,7 +385,7 @@ export function PurchaseRequestsManager({
         <Card className="p-12 text-center">
           <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
           <p className="text-sm text-text-secondary">
-            No purchase requests found. Create your first PR to start tracking procurement.
+            {P.none}
           </p>
         </Card>
       )}
@@ -412,10 +396,11 @@ export function PurchaseRequestsManager({
           <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-navy">
-                {editingPR ? "Edit Purchase Request" : "New Purchase Request"}
+                {editingPR ? P.editTitle : P.add}
               </h2>
               <button
                 onClick={closeForm}
+                aria-label={C.close}
                 className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary"
               >
                 <X className="h-4 w-4" />
@@ -427,7 +412,7 @@ export function PurchaseRequestsManager({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Product Name
+                    {P.productName}
                   </label>
                   <input
                     type="text"
@@ -439,7 +424,7 @@ export function PurchaseRequestsManager({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Quantity
+                    {P.quantity}
                   </label>
                   <input
                     type="number"
@@ -455,7 +440,7 @@ export function PurchaseRequestsManager({
               {/* Description */}
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Description (optional)
+                  {P.description}
                 </label>
                 <textarea
                   name="description"
@@ -469,7 +454,7 @@ export function PurchaseRequestsManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Target Unit Price (USD)
+                    {P.targetPrice}
                   </label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -485,7 +470,7 @@ export function PurchaseRequestsManager({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Factory Quoted Price (USD)
+                    {P.factoryQuoted}
                   </label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -505,7 +490,7 @@ export function PurchaseRequestsManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Factory Name
+                    {P.factoryName}
                   </label>
                   <div className="relative">
                     <Factory className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -519,13 +504,13 @@ export function PurchaseRequestsManager({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Factory Contact
+                    {P.factoryContact}
                   </label>
                   <input
                     type="text"
                     name="factoryContact"
                     defaultValue={editingPR?.factoryContact || ""}
-                    placeholder="Email, phone, or WeChat"
+                    placeholder={P.factoryContactPlaceholder}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
                   />
                 </div>
@@ -535,7 +520,7 @@ export function PurchaseRequestsManager({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Status
+                    {C.status}
                   </label>
                   <select
                     name="status"
@@ -551,7 +536,7 @@ export function PurchaseRequestsManager({
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Expected Delivery Date
+                    {P.expectedDate}
                   </label>
                   <div className="relative">
                     <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled pointer-events-none" />
@@ -572,7 +557,7 @@ export function PurchaseRequestsManager({
               {/* Notes */}
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Notes (customer-facing)
+                  {P.notes}
                 </label>
                 <textarea
                   name="notes"
@@ -584,7 +569,7 @@ export function PurchaseRequestsManager({
 
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Admin Notes (internal only)
+                  {P.adminNotes}
                 </label>
                 <textarea
                   name="adminNotes"
@@ -601,14 +586,14 @@ export function PurchaseRequestsManager({
                   onClick={closeForm}
                   className="flex h-10 items-center rounded-[var(--radius-button)] border border-border px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
                 >
-                  Cancel
+                  {C.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
                   className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
                 >
-                  {isPending ? "Saving..." : editingPR ? "Update PR" : "Create PR"}
+                  {isPending ? C.saving : editingPR ? P.update : P.create}
                   <FileText className="h-4 w-4" />
                 </button>
               </div>

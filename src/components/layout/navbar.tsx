@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Search,
   Menu,
   X,
   Package,
@@ -18,12 +17,17 @@ import { cn } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 import { categories } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
-import { useCurrency } from "@/lib/currency-context";
 import { SearchBar } from "@/components/search/search-bar";
+import { CartButton } from "@/components/cart/cart-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { useI18n } from "@/i18n/client";
+import { categoryName } from "@/i18n/names";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { CurrencySwitcher } from "@/components/layout/currency-switcher";
 
 export function Navbar() {
-  const { currency, currencies, setCurrency } = useCurrency();
+  const { t, format } = useI18n();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaMenuOpen, setMegaMenuOpen] = useState(false);
@@ -117,7 +121,7 @@ export function Navbar() {
             onMouseLeave={() => setMegaMenuOpen(false)}
           >
             <button className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors">
-              Categories
+              {t.layout.nav.categories}
               <ChevronDown className="h-4 w-4" />
             </button>
             {megaMenuOpen && (
@@ -134,10 +138,10 @@ export function Navbar() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-text-primary">
-                          {cat.name}
+                          {categoryName(t, cat.slug, cat.name)}
                         </p>
                         <p className="text-xs text-text-secondary">
-                          {cat.productCount} products
+                          {format(t.layout.nav.productsCount, { n: cat.productCount })}
                         </p>
                       </div>
                     </Link>
@@ -151,20 +155,34 @@ export function Navbar() {
             href="/products"
             className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
           >
-            Products
+            {t.layout.nav.products}
           </Link>
           <Link
             href="/quote"
             className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
           >
-            Request Quote
+            {t.layout.nav.requestQuote}
           </Link>
           <Link
             href="/how-it-works"
             className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
           >
-            How It Works
+            {t.layout.nav.howItWorks}
           </Link>
+          <Link
+            href="/track"
+            className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
+          >
+            {t.tracking.trackOrder}
+          </Link>
+        </div>
+
+        {/* Cart (all screen sizes) */}
+        <div className="ml-auto flex items-center md:ml-0">
+          <CurrencySwitcher className="hidden sm:block" />
+          <LanguageSwitcher />
+          <NotificationBell />
+          <CartButton />
         </div>
 
         {/* CTAs */}
@@ -196,7 +214,7 @@ export function Navbar() {
                     onClick={() => setUserMenuOpen(false)}
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    Dashboard
+                    {t.layout.nav.dashboard}
                   </Link>
                   {isAdmin && (
                     <Link
@@ -205,7 +223,7 @@ export function Navbar() {
                       onClick={() => setUserMenuOpen(false)}
                     >
                       <Shield className="h-4 w-4" />
-                      Admin Panel
+                      {t.layout.nav.adminPanel}
                     </Link>
                   )}
                   <button
@@ -213,7 +231,7 @@ export function Navbar() {
                     className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:text-error hover:bg-surface-secondary transition-colors"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sign Out
+                    {t.layout.nav.signOut}
                   </button>
                 </div>
               )}
@@ -221,12 +239,12 @@ export function Navbar() {
           ) : (
             <ButtonLink href="/login" variant="ghost" size="sm">
               <User className="h-4 w-4" />
-              Login
+              {t.layout.nav.login}
             </ButtonLink>
           )}
           <ButtonLink href="/quote" variant="primary" size="sm">
             <FileText className="h-4 w-4" />
-            Get a Quote
+            {t.layout.nav.getQuote}
           </ButtonLink>
         </div>
 
@@ -234,7 +252,7 @@ export function Navbar() {
         <button
           className="lg:hidden flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] text-text-primary hover:bg-surface-secondary"
           onClick={() => setMobileOpen(!mobileOpen)}
-          aria-label="Toggle menu"
+          aria-label={t.layout.nav.toggleMenu}
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
@@ -245,13 +263,11 @@ export function Navbar() {
         <div className="lg:hidden bg-surface border-t border-border shadow-[var(--shadow-dropdown)]">
           <div className="px-4 py-4 space-y-3">
             {/* Mobile Search */}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
-              />
+            <SearchBar onNavigate={() => setMobileOpen(false)} />
+
+            <div className="flex items-center justify-between px-3 sm:hidden">
+              <span className="text-sm font-medium text-text-primary">{t.layout.currency.title}</span>
+              <CurrencySwitcher />
             </div>
 
             <Link
@@ -259,26 +275,33 @@ export function Navbar() {
               className="block px-3 py-2 text-sm font-medium text-text-primary hover:text-brand"
               onClick={() => setMobileOpen(false)}
             >
-              Products
+              {t.layout.nav.products}
             </Link>
             <Link
               href="/quote"
               className="block px-3 py-2 text-sm font-medium text-text-primary hover:text-brand"
               onClick={() => setMobileOpen(false)}
             >
-              Request Quote
+              {t.layout.nav.requestQuote}
             </Link>
             <Link
               href="/how-it-works"
               className="block px-3 py-2 text-sm font-medium text-text-primary hover:text-brand"
               onClick={() => setMobileOpen(false)}
             >
-              How It Works
+              {t.layout.nav.howItWorks}
+            </Link>
+            <Link
+              href="/track"
+              className="block px-3 py-2 text-sm font-medium text-text-primary hover:text-brand"
+              onClick={() => setMobileOpen(false)}
+            >
+              {t.tracking.trackOrder}
             </Link>
 
             <div className="pt-2 border-t border-border">
               <p className="px-3 py-1 text-xs font-semibold text-text-secondary uppercase tracking-wide">
-                Categories
+                {t.layout.nav.categories}
               </p>
               {categories.slice(0, 6).map((cat) => (
                 <Link
@@ -287,7 +310,7 @@ export function Navbar() {
                   className="block px-3 py-2 text-sm text-text-secondary hover:text-brand"
                   onClick={() => setMobileOpen(false)}
                 >
-                  {cat.name}
+                  {categoryName(t, cat.slug, cat.name)}
                 </Link>
               ))}
             </div>
@@ -302,7 +325,7 @@ export function Navbar() {
                     className="w-full"
                   >
                     <LayoutDashboard className="h-4 w-4" />
-                    Dashboard
+                    {t.layout.nav.dashboard}
                   </ButtonLink>
                   {isAdmin && (
                     <ButtonLink
@@ -312,7 +335,7 @@ export function Navbar() {
                       className="w-full"
                     >
                       <Shield className="h-4 w-4" />
-                      Admin Panel
+                      {t.layout.nav.adminPanel}
                     </ButtonLink>
                   )}
                   <button
@@ -320,7 +343,7 @@ export function Navbar() {
                     className="flex h-11 items-center justify-center gap-2 rounded-[var(--radius-button)] border border-border bg-surface text-sm font-medium text-text-secondary hover:text-error hover:border-error/20 transition-colors w-full"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sign Out
+                    {t.layout.nav.signOut}
                   </button>
                 </>
               ) : (
@@ -331,7 +354,7 @@ export function Navbar() {
                   className="w-full"
                 >
                   <User className="h-4 w-4" />
-                  Login
+                  {t.layout.nav.login}
                 </ButtonLink>
               )}
               <ButtonLink
@@ -341,7 +364,7 @@ export function Navbar() {
                 className="w-full"
               >
                 <FileText className="h-4 w-4" />
-                Get a Quote
+                {t.layout.nav.getQuote}
               </ButtonLink>
             </div>
           </div>

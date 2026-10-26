@@ -21,6 +21,8 @@ import {
 } from "@/lib/queries";
 import { formatPrice, cn } from "@/lib/utils";
 import type { OrderStatus } from "@/types";
+import { getI18n } from "@/i18n/server";
+import { countryName } from "@/i18n/names";
 
 const statusColors: Record<OrderStatus, string> = {
   Pending: "bg-warning/10 text-warning border-warning/20",
@@ -39,6 +41,10 @@ export default async function AdminOverviewPage() {
     getAllOrders(),
     getAllQuotes(),
   ]);
+  const { t, format, formatNumber } = await getI18n();
+  const O = t.admin.overview;
+  const orderStatus = t.status.order as Record<string, string>;
+  const quoteStatus = t.status.quote as Record<string, string>;
 
   const recentOrders = [...orders]
     .sort(
@@ -51,29 +57,29 @@ export default async function AdminOverviewPage() {
 
   const statsCards = [
     {
-      label: "Total Revenue",
+      label: O.revenue,
       value: formatPrice(stats.totalRevenue),
       icon: DollarSign,
       color: "text-success",
       bg: "bg-success/10",
     },
     {
-      label: "Active Orders",
+      label: O.activeOrders,
       value: stats.activeOrders.toString(),
       icon: ShoppingBag,
       color: "text-brand",
       bg: "bg-brand-light",
     },
     {
-      label: "Pending Quotes",
+      label: O.pendingQuotes,
       value: stats.pendingQuotes.toString(),
       icon: FileText,
       color: "text-gold",
       bg: "bg-gold-light",
     },
     {
-      label: "Total Customers",
-      value: stats.totalCustomers.toLocaleString(),
+      label: O.customers,
+      value: formatNumber(stats.totalCustomers),
       icon: Users,
       color: "text-info",
       bg: "bg-info/10",
@@ -85,10 +91,10 @@ export default async function AdminOverviewPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-navy tracking-tight">
-          Admin Dashboard
+          {O.title}
         </h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Overview of platform activity and key metrics.
+          {O.lead}
         </p>
       </div>
 
@@ -123,7 +129,7 @@ export default async function AdminOverviewPage() {
               <p className="text-xl font-bold text-navy">
                 {stats.activeShipments}
               </p>
-              <p className="text-xs text-text-secondary">Active Shipments</p>
+              <p className="text-xs text-text-secondary">{O.activeShipments}</p>
             </div>
           </div>
         </Card>
@@ -134,7 +140,7 @@ export default async function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-xl font-bold text-navy">{stats.totalProducts}</p>
-              <p className="text-xs text-text-secondary">Products in Catalog</p>
+              <p className="text-xs text-text-secondary">{O.products}</p>
             </div>
           </div>
         </Card>
@@ -145,7 +151,7 @@ export default async function AdminOverviewPage() {
             </div>
             <div>
               <p className="text-xl font-bold text-navy">{stats.unreadMessages}</p>
-              <p className="text-xs text-text-secondary">Open Conversations</p>
+              <p className="text-xs text-text-secondary">{O.conversations}</p>
             </div>
           </div>
         </Card>
@@ -158,7 +164,7 @@ export default async function AdminOverviewPage() {
               <p className="text-xl font-bold text-navy">
                 {stats.pendingQuotes}
               </p>
-              <p className="text-xs text-text-secondary">Quotes Needing Review</p>
+              <p className="text-xs text-text-secondary">{O.quotesReview}</p>
             </div>
           </div>
         </Card>
@@ -169,12 +175,12 @@ export default async function AdminOverviewPage() {
         {/* Recent Orders */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-navy">Recent Orders</h2>
+            <h2 className="text-lg font-bold text-navy">{O.recentOrders}</h2>
             <Link
               href="/admin/orders"
               className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover"
             >
-              View all
+              {t.admin.common.viewAll}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -219,7 +225,7 @@ export default async function AdminOverviewPage() {
                           statusColors[order.status]
                         )}
                       >
-                        {order.status}
+                        {orderStatus[order.status] ?? order.status}
                       </span>
                     </div>
                   </div>
@@ -227,7 +233,7 @@ export default async function AdminOverviewPage() {
               ) : (
                 <div className="p-8 text-center">
                   <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-                  <p className="text-sm text-text-secondary">No orders yet.</p>
+                  <p className="text-sm text-text-secondary">{O.noOrders}</p>
                 </div>
               )}
             </div>
@@ -237,12 +243,12 @@ export default async function AdminOverviewPage() {
         {/* Quote Queue */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-navy">Quote Queue</h2>
+            <h2 className="text-lg font-bold text-navy">{O.quoteQueue}</h2>
             <Link
               href="/admin/quotes"
               className="flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-hover"
             >
-              View all
+              {t.admin.common.viewAll}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
@@ -262,8 +268,8 @@ export default async function AdminOverviewPage() {
                         {quote.productName}
                       </p>
                       <p className="text-xs text-text-secondary">
-                        {quote.quantity.toLocaleString()} units ·{" "}
-                        {quote.destinationCountry}
+                        {format(t.admin.common.units, { n: formatNumber(quote.quantity) })} ·{" "}
+                        {countryName(t, quote.destinationCountry)}
                       </p>
                     </div>
                     <span
@@ -279,14 +285,14 @@ export default async function AdminOverviewPage() {
                       {quote.status === "Under Review" && (
                         <Clock className="h-3 w-3" />
                       )}
-                      {quote.status}
+                      {quoteStatus[quote.status] ?? quote.status}
                     </span>
                   </div>
                 ))
               ) : (
                 <div className="p-8 text-center">
                   <FileText className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-                  <p className="text-sm text-text-secondary">No quote requests yet.</p>
+                  <p className="text-sm text-text-secondary">{O.noQuotes}</p>
                 </div>
               )}
             </div>
@@ -296,14 +302,14 @@ export default async function AdminOverviewPage() {
 
       {/* Quick Admin Actions */}
       <div>
-        <h2 className="text-lg font-bold text-navy mb-4">Quick Actions</h2>
+        <h2 className="text-lg font-bold text-navy mb-4">{O.quickActions}</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[
-            { href: "/admin/products", label: "Add Product", icon: Package },
-            { href: "/admin/orders", label: "Manage Orders", icon: ShoppingBag },
-            { href: "/admin/quotes", label: "Review Quotes", icon: FileText },
-            { href: "/admin/customers", label: "Customers", icon: Users },
-            { href: "/admin/staff", label: "Staff & Roles", icon: Users },
+            { href: "/admin/products", label: O.addProduct, icon: Package },
+            { href: "/admin/orders", label: O.manageOrders, icon: ShoppingBag },
+            { href: "/admin/quotes", label: O.reviewQuotes, icon: FileText },
+            { href: "/admin/customers", label: O.customersLink, icon: Users },
+            { href: "/admin/staff", label: O.staff, icon: Users },
           ].map((action) => (
             <Link
               key={action.href}

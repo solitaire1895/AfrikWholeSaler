@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentCustomer, getCurrentUserProfile } from "@/lib/queries";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { getT } from "@/i18n/server";
 
 export default async function DashboardLayout({
   children,
@@ -29,23 +31,22 @@ export default async function DashboardLayout({
         redirect("/admin");
       }
       // Authenticated non-staff with no customer record — show error page
+      const t = await getT();
       return (
         <div className="min-h-screen flex items-center justify-center bg-background p-6">
           <div className="max-w-md text-center">
             <h1 className="text-2xl font-bold text-navy mb-3">
-              Account Setup Incomplete
+              {t.account.shell.setupTitle}
             </h1>
             <p className="text-sm text-text-secondary mb-6">
-              We couldn't load your customer profile. This may be a temporary
-              issue. Please try refreshing the page, or contact support if the
-              problem persists.
+              {t.account.shell.setupText}
             </p>
-            <a
+            <Link
               href="/"
               className="inline-flex items-center justify-center px-6 py-3 rounded-[var(--radius-md)] bg-brand text-white text-sm font-semibold hover:bg-brand-hover transition-colors"
             >
-              Back to Home
-            </a>
+              {t.account.shell.backHome}
+            </Link>
           </div>
         </div>
       );
