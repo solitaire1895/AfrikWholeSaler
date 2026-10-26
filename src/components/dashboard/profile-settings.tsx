@@ -19,12 +19,16 @@ import { Card } from "@/components/ui/card";
 import { updateCustomerProfile, updateProfile } from "@/app/actions/crud";
 import { cn } from "@/lib/utils";
 import type { Customer } from "@/types";
+import { useI18n } from "@/i18n/client";
 
 export function ProfileSettings({ customer }: { customer: Customer }) {
   const [activeTab, setActiveTab] = useState<"profile" | "addresses" | "documents" | "security">(
     "profile"
   );
   const [isPending, startTransition] = useTransition();
+  const { t, format, formatDate } = useI18n();
+  const P = t.account.profile;
+  const verification = (v: string) => (t.account.verification as Record<string, string>)[v] ?? v;
   const [saveStatus, setSaveStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [formData, setFormData] = useState({
     firstName: customer.firstName,
@@ -35,10 +39,10 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
   });
 
   const tabs = [
-    { id: "profile" as const, label: "Profile", icon: User },
-    { id: "addresses" as const, label: "Addresses", icon: MapPin },
-    { id: "documents" as const, label: "Documents", icon: FileText },
-    { id: "security" as const, label: "Security", icon: Shield },
+    { id: "profile" as const, label: P.tabProfile, icon: User },
+    { id: "addresses" as const, label: P.tabAddresses, icon: MapPin },
+    { id: "documents" as const, label: P.tabDocuments, icon: FileText },
+    { id: "security" as const, label: P.tabSecurity, icon: Shield },
   ];
 
   const handleSaveProfile = () => {
@@ -57,11 +61,11 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
         }),
       ]);
       if (custResult.success && profResult.success) {
-        setSaveStatus({ type: "success", message: "Profile updated successfully." });
+        setSaveStatus({ type: "success", message: P.saved });
       } else {
         setSaveStatus({
           type: "error",
-          message: custResult.error || profResult.error || "Failed to update profile.",
+          message: custResult.error || profResult.error || P.saveFailed,
         });
       }
     });
@@ -71,10 +75,10 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-navy tracking-tight">
-          Profile & Settings
+          {P.title}
         </h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Manage your account information, addresses, and documents.
+          {P.lead}
         </p>
       </div>
 
@@ -84,11 +88,10 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold text-text-primary">
-            Account {customer.verificationStatus}
+            {format(P.accountStatus, { status: verification(customer.verificationStatus).toLowerCase() })}
           </p>
           <p className="text-xs text-text-secondary">
-            Your business documents have been verified. You have full access to
-            all features.
+            {P.verifiedText}
           </p>
         </div>
       </div>
@@ -146,25 +149,21 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
             </p>
             <div className="mt-3 inline-flex items-center gap-1 rounded-full border border-success/20 bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">
               <CheckCircle className="h-3 w-3" />
-              {customer.verificationStatus}
+              {verification(customer.verificationStatus)}
             </div>
             <p className="mt-4 text-xs text-text-disabled">
-              Member since{" "}
-              {new Date(customer.createdAt).toLocaleDateString("en-US", {
-                year: "numeric",
-                month: "long",
-              })}
+              {format(P.memberSince, { date: formatDate(customer.createdAt, { year: "numeric", month: "long" }) })}
             </p>
           </Card>
 
           <Card className="p-6 lg:col-span-2">
             <h3 className="text-sm font-semibold text-navy mb-4">
-              Personal Information
+              {P.personal}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  First Name
+                  {P.firstName}
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -178,7 +177,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Last Name
+                  {P.lastName}
                 </label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -192,7 +191,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Email
+                  {P.email}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -206,7 +205,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Phone
+                  {P.phone}
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -220,7 +219,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div className="sm:col-span-2">
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Company Name
+                  {P.company}
                 </label>
                 <div className="relative">
                   <Building className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
@@ -239,7 +238,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
                 disabled={isPending}
                 className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {isPending ? "Saving..." : "Save Changes"}
+                {isPending ? P.saving : P.save}
               </button>
             </div>
           </Card>
@@ -249,10 +248,10 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
       {activeTab === "addresses" && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-navy">Saved Addresses</h3>
+            <h3 className="text-sm font-semibold text-navy">{P.addresses}</h3>
             <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
               <Plus className="h-3.5 w-3.5" />
-              Add Address
+              {P.addAddress}
             </button>
           </div>
           {customer.addresses.length > 0 ? (
@@ -269,7 +268,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
                       </span>
                       {addr.isDefault && (
                         <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-                          Default
+                          {P.default}
                         </span>
                       )}
                     </div>
@@ -297,9 +296,9 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mx-auto mb-4">
                 <MapPin className="h-8 w-8 text-text-disabled" />
               </div>
-              <h3 className="text-lg font-semibold text-navy mb-1">No saved addresses</h3>
+              <h3 className="text-lg font-semibold text-navy mb-1">{P.noAddresses}</h3>
               <p className="text-text-secondary text-sm">
-                Add a delivery address to speed up your quote requests.
+                {P.noAddressesText}
               </p>
             </Card>
           )}
@@ -311,15 +310,15 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-navy">
-                Business Documents
+                {P.documents}
               </h3>
               <p className="text-xs text-text-secondary mt-1">
-                Required for customs clearance and KYC verification.
+                {P.documentsText}
               </p>
             </div>
             <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
               <Plus className="h-3.5 w-3.5" />
-              Upload Document
+              {P.upload}
             </button>
           </div>
           <div className="space-y-3">
@@ -330,10 +329,10 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text-primary">
-                    No documents uploaded yet
+                    {P.noDocuments}
                   </p>
                   <p className="text-xs text-text-secondary">
-                    Upload your business registration, tax ID, and import license.
+                    {P.noDocumentsText}
                   </p>
                 </div>
               </div>
@@ -346,12 +345,12 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
         <div className="space-y-4 max-w-2xl">
           <Card className="p-6">
             <h3 className="text-sm font-semibold text-navy mb-4">
-              Change Password
+              {P.changePassword}
             </h3>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Current Password
+                  {P.currentPassword}
                 </label>
                 <input
                   type="password"
@@ -361,7 +360,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  New Password
+                  {P.newPassword}
                 </label>
                 <input
                   type="password"
@@ -371,7 +370,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Confirm New Password
+                  {P.confirmPassword}
                 </label>
                 <input
                   type="password"
@@ -381,7 +380,7 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
               </div>
               <div className="flex justify-end">
                 <button className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors">
-                  Update Password
+                  {P.updatePassword}
                 </button>
               </div>
             </div>
@@ -391,14 +390,14 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-navy">
-                  Two-Factor Authentication
+                  {P.twoFactor}
                 </h3>
                 <p className="text-xs text-text-secondary mt-1">
-                  Add an extra layer of security to your account.
+                  {P.twoFactorText}
                 </p>
               </div>
               <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
-                Enable 2FA
+                {P.enable2fa}
               </button>
             </div>
           </Card>
@@ -407,14 +406,14 @@ export function ProfileSettings({ customer }: { customer: Customer }) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-navy">
-                  Notification Preferences
+                  {P.notifications}
                 </h3>
                 <p className="text-xs text-text-secondary mt-1">
-                  Manage how you receive order and quote updates.
+                  {P.notificationsText}
                 </p>
               </div>
               <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
-                Manage
+                {P.manage}
               </button>
             </div>
           </Card>

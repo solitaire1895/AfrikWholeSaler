@@ -1,79 +1,112 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useSyncExternalStore, ReactNode } from "react";
+import { useI18n } from "@/i18n/client";
+import { intlLocale } from "@/i18n/config";
+import { CURRENCIES, DEFAULT_CURRENCY, formatAmount, type CurrencyInfo } from "@/lib/currencies";
 
-const FALLBACK_CURRENCIES = [
-  { code: "USD", name: "US Dollar", symbol: "$", rateToUsd: 1.0 },
-  { code: "EUR", name: "Euro", symbol: "€", rateToUsd: 1.08 },
-  { code: "GBP", name: "British Pound", symbol: "£", rateToUsd: 1.27 },
-  { code: "XAF", name: "CFA Franc BEAC", symbol: "FCFA", rateToUsd: 0.0017 },
-  { code: "XOF", name: "CFA Franc BCEAO", symbol: "CFA", rateToUsd: 0.0017 },
-  { code: "NGN", name: "Nigerian Naira", symbol: "₦", rateToUsd: 0.0007 },
-  { code: "KES", name: "Kenyan Shilling", symbol: "KSh", rateToUsd: 0.0078 },
-  { code: "GHS", name: "Ghanaian Cedi", symbol: "₵", rateToUsd: 0.065 },
-  { code: "ZAR", name: "South African Rand", symbol: "R", rateToUsd: 0.054 },
-  { code: "BRL", name: "Brazilian Real", symbol: "R$", rateToUsd: 0.20 },
-  { code: "CAD", name: "Canadian Dollar", symbol: "C$", rateToUsd: 0.73 },
-  { code: "CNY", name: "Chinese Yuan", symbol: "¥", rateToUsd: 0.14 },
-  { code: "INR", name: "Indian Rupee", symbol: "₹", rateToUsd: 0.012 },
-  { code: "AED", name: "UAE Dirham", symbol: "AED", rateToUsd: 0.272 },
-];
+// ========================================================
+// Display currency for the whole site. Prices are stored in USD; the visitor
+// picks a currency (remembered in this browser) and every price converts.
+// ========================================================
+
+const STORAGE_KEY = "preferred_currency";
+const CHANGE_EVENT = "aw:currency-change";
+
+function readSaved(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEY) || DEFAULT_CURRENCY;
+  } catch {
+    return DEFAULT_CURRENCY;
+  }
+}
+
+function subscribe(onChange: () => void) {
+  // Other tabs (storage) and this tab (custom event) both update the choice.
+  window.addEventListener("storage", onChange);
+  window.addEventListener(CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(CHANGE_EVENT, onChange);
+  };
+}
+
+interface CurrencyContextValue {
+  currency: string;
+  info: CurrencyInfo;
+  currencies: CurrencyInfo[];
+  setCurrency: (code: string) => void;
+  convertPrice: (priceInUsd: number) => number;
+  formatPrice: (priceInUsd: number) => string;
+  formatPriceWithSymbol: (priceInUsd: number) => string;
+}
+
+const CurrencyContext = createContext<CurrencyContextValue | null>(null);
 
 export function CurrencyProvider({ children }: { children: ReactNode }) {
-  const [currency, setCurrencyState] = useState("USD");
-  const [currencies, setCurrencies] = useState(FALLBACK_CURRENCIES);
+  // The server always renders USD; the saved choice applies right after hydration.
+  const saved = useSyncExternalStore(subscribe, readSaved, () => DEFAULT_CURRENCY);
+  const [currencies, setCurrencies] = useState<CurrencyInfo[]>(CURRENCIES);
+  // Digits are grouped the way the visitor's language expects (1 234,50 in French).
+  const numberLocale = intlLocale[useI18n().locale];
 
+  // Live rates from the database override the built-in defaults.
   useEffect(() => {
-    const saved = localStorage.getItem("preferred_currency");
-    if (saved) setCurrencyState(saved);
-  }, []);
-
-  useEffect(() => {
-    async function fetchCurrencies() {
+    let active = true;
+    (async () => {
       try {
         const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        const { data, error } = await supabase
+        const { data, error } = await createClient()
           .from("currencies")
-          .select("code, name, symbol, rate_to_usd")
-          .eq("is_active", true)
-          .order("name", { ascending: true });
-        if (!error && data && data.length > 0) {
-          setCurrencies(data.map((c: { code: string; name: string; symbol: string; rate_to_usd: number }) => ({
-            code: c.code, name: c.name, symbol: c.symbol, rateToUsd: Number(c.rate_to_usd),
-          })));
-        }
-      } catch { /* keep fallback */ }
-    }
-    fetchCurrencies();
+          .select("code, symbol, rate_to_usd, per_usd, is_active");
+        if (error || !data?.length || !active) return;
+        const rows = new Map(
+          (data as { code: string; symbol: string; rate_to_usd: number | null; per_usd: number | null; is_active: boolean }[]).map((r) => [r.code, r])
+        );
+        setCurrencies(
+          CURRENCIES.flatMap((cur) => {
+            const row = rows.get(cur.code);
+            if (!row) return [cur];
+            if (!row.is_active) return [];
+            const perUsd = Number(row.per_usd) || (Number(row.rate_to_usd) ? 1 / Number(row.rate_to_usd) : 0);
+            return [{ ...cur, perUsd: perUsd > 0 ? perUsd : cur.perUsd }];
+          })
+        );
+      } catch {
+        // keep the built-in rates
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const setCurrency = useCallback((code: string) => {
-    setCurrencyState(code);
-    localStorage.setItem("preferred_currency", code);
+    try {
+      localStorage.setItem(STORAGE_KEY, code);
+    } catch {
+      // storage blocked — choice lasts until the page reloads
+    }
+    window.dispatchEvent(new Event(CHANGE_EVENT));
   }, []);
 
-  const convertPrice = useCallback((priceInUsd: number): number => {
-    const target = currencies.find((c) => c.code === currency);
-    if (!target || target.rateToUsd === 0) return priceInUsd;
-    return priceInUsd / target.rateToUsd;
-  }, [currency, currencies]);
+  const value = useMemo<CurrencyContextValue>(() => {
+    const info =
+      currencies.find((c) => c.code === saved) ?? currencies.find((c) => c.code === DEFAULT_CURRENCY) ?? CURRENCIES[0];
+    const convertPrice = (priceInUsd: number) => priceInUsd * info.perUsd;
+    const formatPrice = (priceInUsd: number) => formatAmount(convertPrice(priceInUsd), info, numberLocale);
+    return {
+      currency: info.code,
+      info,
+      currencies,
+      setCurrency,
+      convertPrice,
+      formatPrice,
+      formatPriceWithSymbol: formatPrice,
+    };
+  }, [saved, currencies, numberLocale, setCurrency]);
 
-  const formatPrice = useCallback((priceInUsd: number): string => {
-    const converted = convertPrice(priceInUsd);
-    const target = currencies.find((c) => c.code === currency);
-    const symbol = target?.symbol || "$";
-    if (currency === "XAF" || currency === "XOF" || currency === "JPY") {
-      return `${symbol} ${Math.round(converted).toLocaleString("en-US")}`;
-    }
-    return `${symbol} ${converted.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  }, [convertPrice, currency, currencies]);
-
-  return (
-    <CurrencyContext.Provider value={{ currency, currencies, setCurrency, convertPrice, formatPrice, formatPriceWithSymbol: formatPrice }}>
-      {children}
-    </CurrencyContext.Provider>
-  );
+  return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;
 }
 
 export function useCurrency() {
@@ -81,12 +114,3 @@ export function useCurrency() {
   if (!context) throw new Error("useCurrency must be used within a CurrencyProvider");
   return context;
 }
-
-const CurrencyContext = createContext<{
-  currency: string;
-  currencies: { code: string; name: string; symbol: string; rateToUsd: number }[];
-  setCurrency: (code: string) => void;
-  convertPrice: (priceInUsd: number) => number;
-  formatPrice: (priceInUsd: number) => string;
-  formatPriceWithSymbol: (priceInUsd: number) => string;
-} | null>(null);

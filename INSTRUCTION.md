@@ -152,6 +152,107 @@ The app will be available at `http://localhost:3000`.
 
 ---
 
+## 10. Get a Resend API Key (transactional emails)
+
+Resend sends the order confirmations, payment receipts, shipping updates and invoices. Free plan: 3,000 emails/month (100/day).
+
+### a. Create the account and the key
+1. Go to [resend.com](https://resend.com) and click **Sign up** (you can use your Google or GitHub account).
+2. In the dashboard, open **API Keys** → **Create API Key**.
+   - **Name**: `afrikwholesaler-production`
+   - **Permission**: **Sending access**
+   - **Domain**: choose your domain once it's added (step b), or **All domains** for now.
+3. Click **Add**, then copy the key. It starts with `re_` and **is shown only once**.
+
+### b. Verify your domain (so emails come from you and don't land in spam)
+1. In Resend, open **Domains** → **Add Domain** and enter your domain, e.g. `afrikwholesaler.com`.
+   Tip: use a subdomain like `mail.afrikwholesaler.com` so it doesn't interfere with your normal mailbox.
+2. Resend shows a few DNS records (one **MX**, one or two **TXT** for SPF and DKIM, and optionally **DMARC**).
+3. Add them at your domain host. On **Hostinger**: **hPanel** → **Domains** → your domain → **DNS / Nameservers** → **Manage DNS records**, then add each record exactly as Resend shows it (type, name, value). Delete nothing that already exists.
+4. Back in Resend, click **Verify DNS Records**. It can take from a few minutes up to 24 hours. The status must be **Verified**.
+
+### c. Add it to the project
+In `.env.local` (and later in your Hostinger environment variables), add:
+```
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxxxxx
+EMAIL_FROM="AfrikWholesaler <orders@afrikwholesaler.com>"
+```
+The address in `EMAIL_FROM` must use the domain you verified. While the domain isn't verified yet, Resend only lets you send test emails **to your own Resend account address**, from `onboarding@resend.dev`.
+
+⚠️ Never put the key in the code or share it in chat. If it ever leaks, delete it in **API Keys** and create a new one.
+
+---
+
+### d. Emails the app sends
+
+| Email | When | Language |
+|---|---|---|
+| Order confirmation | Right after checkout | The language the customer shops in |
+| Payment receipt | When SasPay confirms the payment (sent once) | Customer's saved language |
+| Shipping update | When staff create the shipment, or post a tracking update marked "visible to the customer" | Customer's saved language |
+
+Run `supabase/emails.sql` once (it adds the `locale` column used to remember each customer's language). Without it, emails are sent in French.
+
+### e. Send Supabase's own emails through Resend (signup confirmation, password reset)
+
+Supabase's built-in mail server is limited to a few emails per hour and often lands in spam. Route it through Resend:
+
+1. Supabase Dashboard → **Project Settings** → **Authentication** → **SMTP Settings** → enable **Custom SMTP**.
+2. Fill in:
+   | Field | Value |
+   |---|---|
+   | Sender email | `orders@mail.afrikwholesaler.store` (same domain as `EMAIL_FROM`) |
+   | Sender name | `AfrikWholesaler` |
+   | Host | `smtp.resend.com` |
+   | Port | `465` |
+   | Username | `resend` |
+   | Password | your Resend API key (`re_…`) |
+3. **Save**. Then **Authentication** → **Rate Limits**: raise "emails sent per hour" (e.g. 100).
+4. Optional: **Authentication** → **Email Templates** to translate the confirmation and reset emails (French by default for your customers).
+
+---
+
+## 11. Get a Sentry DSN (error monitoring)
+
+Sentry emails you when something breaks (failed payment, webhook error, page crash) with the details needed to fix it. Free plan: 5,000 errors/month, 1 user.
+
+### a. Create the account and the project
+1. Go to [sentry.io/signup](https://sentry.io/signup/) and create an account. Pick the data region closest to you (**EU** is a good choice for Africa/Europe).
+2. Create an **organization** when asked (e.g. `afrikwholesaler`).
+3. Click **Projects** → **Create Project**:
+   - **Platform**: **Next.js**
+   - **Alert frequency**: "Alert me on every new issue"
+   - **Project name**: `afrikwholesaler-web`
+4. Click **Create Project**. Sentry shows a setup page — **you can skip the wizard** (it's already handled in the code). Just copy the **DSN**.
+
+### b. Where to find the DSN later
+**Settings** → **Projects** → `afrikwholesaler-web` → in the left menu, group **SDK Setup** → **Client Keys (DSN)** (sometimes just **Keys**).
+Direct link: `https://<your-org>.sentry.io/settings/projects/afrikwholesaler-web/keys/`.
+⚠️ Don't confuse it with **Security Token** (a different setting, not needed). The DSN is a URL containing `ingest`, like:
+```
+https://abc123def456@o123456.ingest.de.sentry.io/7890123
+```
+
+### c. (Optional) Auth token for readable error traces
+So production errors point to your real source lines instead of minified code:
+1. **Settings** → **Auth Tokens** → **Create New Token** (organization token, default scopes).
+2. Copy it (shown only once).
+
+### d. Add it to the project
+In `.env.local` (and later in your Hostinger environment variables), add:
+```
+NEXT_PUBLIC_SENTRY_DSN=https://abc123def456@o123456.ingest.de.sentry.io/7890123
+SENTRY_ORG=afrikwholesaler
+SENTRY_PROJECT=afrikwholesaler-web
+SENTRY_AUTH_TOKEN=sntrys_xxxxxxxx   # optional, from step c
+```
+The DSN is safe to be public (it only lets the app *send* errors). The **auth token is secret** — keep it in the environment only.
+
+### e. Check it works
+After the integration is deployed, Sentry's project page shows **"Waiting for events"** until the first error arrives. You'll receive an email for each new error.
+
+---
+
 ## Architecture Summary
 
 | File | Purpose |

@@ -5,6 +5,8 @@ import { ShieldCheck, Plus, Mail, Edit2, X, UserPlus, Trash2, Ban, CheckCircle, 
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { createStaffMember, updateStaffMember, updateUserRole, suspendUser, unsuspendUser, deleteUser } from "@/app/actions/crud";
+import { useT } from "@/i18n/client";
+import { format } from "@/i18n/format";
 
 interface StaffMember {
   id: string;
@@ -48,18 +50,18 @@ const roleColors: Record<string, string> = {
   customer: "bg-surface-secondary text-text-secondary border-border",
 };
 
-const roleLabels: Record<string, string> = {
-  super_admin: "Super Admin",
-  admin: "Admin",
-  sales_rep: "Sales Agent",
-  support_agent: "Customer Support",
-  warehouse_staff: "Warehouse Staff",
-  logistics_staff: "Logistics Coordinator",
-  operations_manager: "Operations Manager",
-  customer: "Customer",
-};
+const roleKeys = [
+  "super_admin",
+  "admin",
+  "sales_rep",
+  "support_agent",
+  "warehouse_staff",
+  "logistics_staff",
+  "operations_manager",
+  "customer",
+] as const;
 
-const departments = ["Sales", "Support", "Warehouse", "Logistics", "Operations", "Management"];
+const departments = ["Sales", "Support", "Warehouse", "Logistics", "Operations", "Management"] as const;
 
 export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerProps) {
   const isSuperAdmin = currentUserRole === "super_admin";
@@ -70,6 +72,11 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
   const [userSearch, setUserSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const t = useT();
+  const S = t.adminCatalog.staff;
+  const C = t.admin.common;
+  const roleLabels = t.admin.roles as Record<string, string>;
+  const deptLabel = (d: string) => (S.departments as Record<string, string>)[d] ?? d;
 
   const staffUserIds = new Set(staff.map((s) => s.userId));
 
@@ -126,12 +133,12 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
           closeForm();
           window.location.reload();
         } else {
-          setError(result.error || "Failed to update staff member");
+          setError(result.error || C.failed);
         }
       } else {
         const userId = selectedUser?.id || (formData.get("userId") as string);
         if (!userId) {
-          setError("Please select a user to add as staff.");
+          setError(S.selectUserError);
           return;
         }
         const result = await createStaffMember({
@@ -146,7 +153,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
           closeForm();
           window.location.reload();
         } else {
-          setError(result.error || "Failed to add staff member");
+          setError(result.error || C.failed);
         }
       }
     });
@@ -156,7 +163,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
     startTransition(async () => {
       const result = await updateStaffMember(member.id, { isActive: !member.isActive });
       if (!result.success) {
-        setError(result.error || "Failed to update staff status");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -167,7 +174,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
     startTransition(async () => {
       const result = await updateUserRole(member.userId, newRole);
       if (!result.success) {
-        setError(result.error || "Failed to update role");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -178,7 +185,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
     startTransition(async () => {
       const result = await suspendUser(member.userId);
       if (!result.success) {
-        setError(result.error || "Failed to suspend user");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -189,7 +196,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
     startTransition(async () => {
       const result = await unsuspendUser(member.userId);
       if (!result.success) {
-        setError(result.error || "Failed to unsuspend user");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -197,13 +204,13 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
   }
 
   function handleDelete(member: StaffMember) {
-    if (!confirm("Are you sure you want to delete " + member.firstName + " " + member.lastName + "? This will remove their profile and staff record. This action cannot be undone.")) {
+    if (!confirm(format(S.confirmDelete, { name: `${member.firstName} ${member.lastName}` }))) {
       return;
     }
     startTransition(async () => {
       const result = await deleteUser(member.userId);
       if (!result.success) {
-        setError(result.error || "Failed to delete user");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -214,9 +221,9 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Staff &amp; Roles</h1>
+          <h1 className="text-2xl font-bold text-navy tracking-tight">{S.title}</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Manage team members and their permissions.
+            {S.lead}
           </p>
         </div>
         {isSuperAdmin && (
@@ -225,7 +232,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
             className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
           >
             <Plus className="h-4 w-4" />
-            Add Staff Member
+            {S.add}
           </button>
         )}
       </div>
@@ -266,33 +273,33 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                 <div className="flex items-center gap-1.5">
                   {member.profileIsActive === false && (
                     <span className="inline-flex items-center rounded-full bg-error/10 px-2 py-0.5 text-xs font-medium text-error">
-                      Suspended
+                      {S.suspended}
                     </span>
                   )}
                   <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", member.isActive ? "bg-success/10 text-success" : "bg-surface-secondary text-text-secondary")}>
-                    {member.isActive ? "Active" : "Inactive"}
+                    {member.isActive ? S.active : S.inactive}
                   </span>
                 </div>
               </div>
 
               <div className="mb-3">
-                <label className="block text-xs font-medium text-text-secondary mb-1">Change Role</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1">{S.changeRole}</label>
                 <select
                   value={member.role}
                   onChange={(e) => handleRoleChange(member, e.target.value)}
                   disabled={isPending}
                   className="w-full h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
                 >
-                  {Object.entries(roleLabels).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
+                  {roleKeys.map((key) => (
+                    <option key={key} value={key}>{roleLabels[key]}</option>
                   ))}
                 </select>
               </div>
 
               <div className="text-xs text-text-secondary space-y-1 mb-3">
-                <p>Department: <span className="font-medium text-text-primary">{member.department}</span></p>
-                {member.position && <p>Position: <span className="font-medium text-text-primary">{member.position}</span></p>}
-                {member.employeeId && <p>Employee ID: <span className="font-medium text-text-primary">{member.employeeId}</span></p>}
+                <p>{S.department} <span className="font-medium text-text-primary">{deptLabel(member.department)}</span></p>
+                {member.position && <p>{S.position} <span className="font-medium text-text-primary">{member.position}</span></p>}
+                {member.employeeId && <p>{S.employeeId} <span className="font-medium text-text-primary">{member.employeeId}</span></p>}
               </div>
 
               <div className="flex items-center justify-between pt-3 border-t border-border">
@@ -302,7 +309,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                     disabled={isPending}
                     className="text-xs font-medium text-text-secondary hover:text-brand disabled:opacity-50"
                   >
-                    {member.isActive ? "Deactivate" : "Activate"}
+                    {member.isActive ? S.deactivate : S.activate}
                   </button>
                   {member.profileIsActive ? (
                     <button
@@ -311,7 +318,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                       className="flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-error disabled:opacity-50"
                     >
                       <Ban className="h-3 w-3" />
-                      Suspend
+                      {S.suspend}
                     </button>
                   ) : (
                     <button
@@ -320,7 +327,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                       className="flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-success disabled:opacity-50"
                     >
                       <CheckCircle className="h-3 w-3" />
-                      Unsuspend
+                      {S.unsuspend}
                     </button>
                   )}
                   <button
@@ -329,12 +336,13 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                     className="flex items-center gap-1 text-xs font-medium text-text-secondary hover:text-error disabled:opacity-50"
                   >
                     <Trash2 className="h-3 w-3" />
-                    Delete
+                    {C.delete}
                   </button>
                 </div>
                 <button
                   onClick={() => openEditForm(member)}
                   disabled={isPending}
+                  aria-label={C.edit}
                   className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-brand disabled:opacity-50"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
@@ -346,7 +354,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
       ) : (
         <Card className="p-12 text-center">
           <ShieldCheck className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-          <p className="text-sm text-text-secondary">No staff members found. {isSuperAdmin ? "Add your first team member to get started." : "Ask a super admin to add team members."}</p>
+          <p className="text-sm text-text-secondary">{S.none} {isSuperAdmin ? S.noneSuper : S.noneOther}</p>
         </Card>
       )}
 
@@ -355,10 +363,11 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
           <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold text-navy">
-                {editingStaff ? "Edit Staff Member" : "Add Staff Member"}
+                {editingStaff ? S.editTitle : S.add}
               </h2>
               <button
                 onClick={closeForm}
+                aria-label={C.close}
                 className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary"
               >
                 <X className="h-4 w-4" />
@@ -368,7 +377,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
             <form action={handleSubmit} className="space-y-4">
               {!editingStaff && (
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Select User</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.selectUser}</label>
                   <div className="relative">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-disabled" />
@@ -381,7 +390,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                           setSelectedUser(null);
                         }}
                         onFocus={() => setShowUserDropdown(true)}
-                        placeholder="Search by name or email..."
+                        placeholder={S.userSearch}
                         className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
                       />
                     </div>
@@ -412,7 +421,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                           ))
                         ) : (
                           <div className="px-4 py-3 text-sm text-text-secondary text-center">
-                            No users found. Try a different search.
+                            {S.noUsers}
                           </div>
                         )}
                       </div>
@@ -438,6 +447,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                           setSelectedUser(null);
                           setUserSearch("");
                         }}
+                        aria-label={S.clearUser}
                         className="flex h-6 w-6 items-center justify-center rounded-full text-text-secondary hover:bg-surface-secondary"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -445,32 +455,32 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                     </div>
                   )}
                   <input type="hidden" name="userId" value={selectedUser?.id || ""} />
-                  <p className="text-xs text-text-disabled mt-1">Search for a customer or user to add as a staff member.</p>
+                  <p className="text-xs text-text-disabled mt-1">{S.userHint}</p>
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Department</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.departmentLabel}</label>
                   <select
                     name="department"
                     defaultValue={editingStaff?.department || ""}
                     required
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
                   >
-                    <option value="">Select department</option>
+                    <option value="">{S.selectDepartment}</option>
                     {departments.map((d) => (
-                      <option key={d} value={d}>{d}</option>
+                      <option key={d} value={d}>{deptLabel(d)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Position</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.positionLabel}</label>
                   <input
                     type="text"
                     name="position"
                     defaultValue={editingStaff?.position || ""}
-                    placeholder="e.g. Senior Sales Agent"
+                    placeholder={S.positionPlaceholder}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
                   />
                 </div>
@@ -478,18 +488,18 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Employee ID (optional)</label>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.employeeIdLabel}</label>
                   <input
                     type="text"
                     name="employeeId"
                     defaultValue={editingStaff?.employeeId || ""}
-                    placeholder="e.g. EMP-001"
+                    placeholder={S.employeeIdPlaceholder}
                     className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none"
                   />
                 </div>
                 {!editingStaff && (
                   <div>
-                    <label className="block text-xs font-medium text-text-secondary mb-1.5">Hire Date</label>
+                    <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.hireDate}</label>
                     <input
                       type="date"
                       name="hireDate"
@@ -501,14 +511,14 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1.5">Role</label>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">{S.role}</label>
                 <select
                   name="role"
                   defaultValue={editingStaff?.role || "sales_rep"}
                   className="w-full h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
                 >
-                  {Object.entries(roleLabels).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
+                  {roleKeys.map((key) => (
+                    <option key={key} value={key}>{roleLabels[key]}</option>
                   ))}
                 </select>
               </div>
@@ -522,7 +532,7 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                       defaultChecked={editingStaff.isActive}
                       className="h-4 w-4 rounded border-border"
                     />
-                    Active
+                    {S.active}
                   </label>
                 </div>
               )}
@@ -533,14 +543,14 @@ export function StaffManager({ staff, profiles, currentUserRole }: StaffManagerP
                   onClick={closeForm}
                   className="flex h-10 items-center rounded-[var(--radius-button)] border border-border px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
                 >
-                  Cancel
+                  {C.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={isPending}
                   className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors disabled:opacity-50"
                 >
-                  {isPending ? "Saving..." : editingStaff ? "Update Staff Member" : "Add Staff Member"}
+                  {isPending ? C.saving : editingStaff ? S.update : S.add}
                   {!editingStaff && <UserPlus className="h-4 w-4" />}
                 </button>
               </div>

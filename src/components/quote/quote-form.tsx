@@ -22,6 +22,8 @@ import { ButtonLink } from "@/components/ui/button";
 import { createQuoteRequest } from "@/app/actions/crud";
 import { cn } from "@/lib/utils";
 import type { Product, Category } from "@/types";
+import { useT } from "@/i18n/client";
+import { categoryName } from "@/i18n/names";
 
 export function QuoteForm({
   preselectedProduct,
@@ -32,6 +34,9 @@ export function QuoteForm({
 }) {
   const searchParams = useSearchParams();
   const preselectedSlug = searchParams.get("product");
+  const t = useT();
+  const Q = t.quote;
+  const countryLabel = (c: string) => (t.shop.countries as Record<string, string>)[c] ?? c;
 
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +61,7 @@ export function QuoteForm({
     "Cameroon",
     "Kenya",
     "Ghana",
-    "Ivory Coast",
+    "Côte d'Ivoire",
     "Tanzania",
     "Uganda",
     "Other",
@@ -80,7 +85,7 @@ export function QuoteForm({
       if (result.success) {
         setSubmitted(true);
       } else {
-        setError(result.error || "Something went wrong. Please try again.");
+        setError(result.error || Q.genericError);
       }
     });
   };
@@ -104,12 +109,10 @@ export function QuoteForm({
               <CheckCircle className="h-8 w-8 text-success" />
             </div>
             <h1 className="text-2xl font-bold text-navy mb-2">
-              Quote Request Submitted!
+              {Q.successTitle}
             </h1>
             <p className="text-text-secondary text-sm mb-6">
-              Thank you for your request. Our sourcing team will review your
-              requirements and send you a detailed quote within 24 hours. You'll
-              receive a notification in your dashboard and via email.
+              {Q.successText}
             </p>
             <div className="space-y-3">
               <ButtonLink
@@ -118,7 +121,7 @@ export function QuoteForm({
                 size="md"
                 className="w-full"
               >
-                View My Quote Requests
+                {Q.viewQuotes}
                 <ArrowRight className="h-4 w-4" />
               </ButtonLink>
               <ButtonLink
@@ -127,7 +130,7 @@ export function QuoteForm({
                 size="md"
                 className="w-full"
               >
-                Continue Browsing
+                {Q.continueBrowsing}
               </ButtonLink>
             </div>
           </Card>
@@ -148,20 +151,19 @@ export function QuoteForm({
               <FileText className="h-7 w-7 text-white" />
             </div>
             <h1 className="text-3xl font-bold text-navy tracking-tight">
-              Request a Quote
+              {Q.title}
             </h1>
             <p className="mt-2 text-text-secondary">
-              Tell us what you need and our team will source it, negotiate
-              pricing, and send you a detailed quote.
+              {Q.lead}
             </p>
           </div>
 
           {/* Trust Indicators */}
           <div className="grid grid-cols-3 gap-3 mb-8">
             {[
-              { icon: ShieldCheck, label: "Quality Inspected" },
-              { icon: Truck, label: "End-to-End Logistics" },
-              { icon: Package, label: "Sold by AfrikWholesaler" },
+              { icon: ShieldCheck, label: Q.trust.quality },
+              { icon: Truck, label: Q.trust.logistics },
+              { icon: Package, label: Q.trust.sold },
             ].map((item) => (
               <div
                 key={item.label}
@@ -180,7 +182,7 @@ export function QuoteForm({
             <div className="mb-6 flex items-start gap-3 p-4 rounded-[var(--radius-md)] border border-error/20 bg-error/5">
               <AlertCircle className="h-5 w-5 text-error shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-error">Error</p>
+                <p className="text-sm font-semibold text-error">{Q.error}</p>
                 <p className="text-sm text-text-secondary mt-1">{error}</p>
               </div>
             </div>
@@ -192,7 +194,7 @@ export function QuoteForm({
               {/* Product Selection */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Product <span className="text-brand">*</span>
+                  {Q.product} <span className="text-brand">*</span>
                 </label>
                 {preselectedProduct ? (
                   <div className="flex items-center justify-between p-3 rounded-[var(--radius-input)] border border-brand bg-brand-light">
@@ -205,6 +207,7 @@ export function QuoteForm({
                         setFormData({ ...formData, productName: "", productSlug: "", productId: "" })
                       }
                       className="text-text-secondary hover:text-brand"
+                      aria-label={Q.removeProduct}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -212,7 +215,7 @@ export function QuoteForm({
                 ) : (
                   <input
                     type="text"
-                    placeholder="e.g. USB-C Chargers, Cotton T-Shirts, or describe a custom product"
+                    placeholder={Q.productPlaceholder}
                     value={formData.productName}
                     onChange={(e) =>
                       setFormData({ ...formData, productName: e.target.value })
@@ -222,15 +225,14 @@ export function QuoteForm({
                   />
                 )}
                 <p className="mt-1.5 text-xs text-text-secondary">
-                  Don't see it in our catalog? Describe what you need — we source
-                  custom products too.
+                  {Q.productHint}
                 </p>
               </div>
 
               {/* Category */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Category
+                  {Q.category}
                 </label>
                 <select
                   value={formData.category}
@@ -239,10 +241,10 @@ export function QuoteForm({
                   }
                   className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm text-text-primary focus:border-brand focus:outline-none cursor-pointer"
                 >
-                  <option value="">Select a category (optional)</option>
+                  <option value="">{Q.categoryPlaceholder}</option>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.slug}>
-                      {cat.name}
+                      {categoryName(t, cat.slug, cat.name)}
                     </option>
                   ))}
                 </select>
@@ -252,11 +254,11 @@ export function QuoteForm({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-navy mb-2">
-                    Quantity <span className="text-brand">*</span>
+                    {Q.quantity} <span className="text-brand">*</span>
                   </label>
                   <input
                     type="number"
-                    placeholder="e.g. 500"
+                    placeholder={Q.quantityPlaceholder}
                     value={formData.quantity}
                     onChange={(e) =>
                       setFormData({ ...formData, quantity: e.target.value })
@@ -268,12 +270,12 @@ export function QuoteForm({
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-navy mb-2">
-                    Target Price (USD/unit)
+                    {Q.targetPrice}
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    placeholder="e.g. 2.50"
+                    placeholder={Q.targetPricePlaceholder}
                     value={formData.targetPrice}
                     onChange={(e) =>
                       setFormData({ ...formData, targetPrice: e.target.value })
@@ -286,7 +288,7 @@ export function QuoteForm({
               {/* Destination */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Destination Country <span className="text-brand">*</span>
+                  {Q.destination} <span className="text-brand">*</span>
                 </label>
                 <select
                   value={formData.destinationCountry}
@@ -301,7 +303,7 @@ export function QuoteForm({
                 >
                   {destinations.map((d) => (
                     <option key={d} value={d}>
-                      {d}
+                      {countryLabel(d)}
                     </option>
                   ))}
                 </select>
@@ -310,10 +312,10 @@ export function QuoteForm({
               {/* Description */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Additional Details
+                  {Q.details}
                 </label>
                 <textarea
-                  placeholder="Describe specifications, colors, sizes, materials, packaging requirements, or any other details..."
+                  placeholder={Q.detailsPlaceholder}
                   value={formData.description}
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
@@ -326,11 +328,11 @@ export function QuoteForm({
               {/* Customization */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Customization / Private Label
+                  {Q.customization}
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Custom logo, branded packaging, specific colors"
+                  placeholder={Q.customizationPlaceholder}
                   value={formData.customization}
                   onChange={(e) =>
                     setFormData({ ...formData, customization: e.target.value })
@@ -342,13 +344,13 @@ export function QuoteForm({
               {/* Urgency */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Urgency
+                  {Q.urgency}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
-                    { value: "standard", label: "Standard", desc: "15-30 days" },
-                    { value: "express", label: "Express", desc: "10-20 days" },
-                    { value: "rush", label: "Rush", desc: "7-15 days" },
+                    { value: "standard", ...Q.urgencies.standard },
+                    { value: "express", ...Q.urgencies.express },
+                    { value: "rush", ...Q.urgencies.rush },
                   ].map((opt) => (
                     <button
                       key={opt.value}
@@ -384,7 +386,7 @@ export function QuoteForm({
               {/* Attachments */}
               <div>
                 <label className="block text-sm font-semibold text-navy mb-2">
-                  Attachments
+                  {Q.attachments}
                 </label>
                 <div className="space-y-2">
                   {attachments.map((name) => (
@@ -400,6 +402,7 @@ export function QuoteForm({
                         type="button"
                         onClick={() => removeAttachment(name)}
                         className="text-text-disabled hover:text-error"
+                        aria-label={Q.removeAttachment}
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -411,7 +414,7 @@ export function QuoteForm({
                     className="flex w-full items-center justify-center gap-2 p-3 rounded-[var(--radius-sm)] border-2 border-dashed border-border text-sm text-text-secondary hover:border-brand hover:text-brand transition-colors"
                   >
                     <Upload className="h-4 w-4" />
-                    Upload spec sheet or reference images
+                    {Q.upload}
                   </button>
                 </div>
               </div>
@@ -421,12 +424,10 @@ export function QuoteForm({
                 <Sparkles className="h-5 w-5 text-navy shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-semibold text-navy">
-                    AI Sourcing Assistant
+                    {Q.aiTitle}
                   </p>
                   <p className="text-xs text-text-secondary mt-1">
-                    Our AI will analyze your request and provide instant
-                    recommendations from our catalog. A sales representative will
-                    follow up with a detailed quote within 24 hours.
+                    {Q.aiText}
                   </p>
                 </div>
               </div>
@@ -441,12 +442,12 @@ export function QuoteForm({
                   {isPending ? (
                     <>
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Submitting...
+                      {Q.submitting}
                     </>
                   ) : (
                     <>
                       <FileText className="h-5 w-5" />
-                      Submit Quote Request
+                      {Q.submit}
                     </>
                   )}
                 </button>
@@ -457,7 +458,7 @@ export function QuoteForm({
                   className="flex-1"
                 >
                   <MessageCircle className="h-5 w-5" />
-                  Chat Instead
+                  {Q.chatInstead}
                 </ButtonLink>
               </div>
             </form>
@@ -465,8 +466,7 @@ export function QuoteForm({
 
           {/* Info Note */}
           <p className="mt-6 text-center text-xs text-text-secondary">
-            By submitting this request, you agree to our Terms of Service. Quote
-            estimates are non-binding until confirmed by our team.
+            {Q.legal}
           </p>
         </div>
       </main>

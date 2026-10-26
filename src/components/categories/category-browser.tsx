@@ -9,6 +9,8 @@ import { Footer } from "@/components/layout/footer";
 import { ProductCard } from "@/components/product/product-card";
 import { cn } from "@/lib/utils";
 import type { Product, Category, SubCategory } from "@/types";
+import { useI18n } from "@/i18n/client";
+import { categoryName, subCategoryName } from "@/i18n/names";
 
 export function CategoryBrowser({
   category,
@@ -22,6 +24,9 @@ export function CategoryBrowser({
   allCategories: Category[];
 }) {
   const [selectedSubCategory, setSelectedSubCategory] = useState<string>("all");
+  const { t, format } = useI18n();
+  const C = t.catalog.category;
+  const name = categoryName(t, category.slug, category.name);
 
   const categoryProducts = products.filter((p) => {
     if (p.categorySlug !== category.slug) return false;
@@ -38,15 +43,15 @@ export function CategoryBrowser({
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
             <nav className="flex items-center gap-1.5 text-sm text-text-secondary">
               <Link href="/" className="hover:text-brand">
-                Home
+                {t.catalog.list.home}
               </Link>
               <ChevronRight className="h-3.5 w-3.5" />
               <Link href="/products" className="hover:text-brand">
-                Products
+                {t.catalog.list.products}
               </Link>
               <ChevronRight className="h-3.5 w-3.5" />
               <span className="text-text-primary font-medium">
-                {category.name}
+                {name}
               </span>
             </nav>
           </div>
@@ -58,7 +63,7 @@ export function CategoryBrowser({
             {category.image ? (
               <Image
                 src={category.image}
-                alt={category.name}
+                alt={name}
                 fill
                 sizes="100vw"
                 className="object-cover"
@@ -76,11 +81,10 @@ export function CategoryBrowser({
                   </div>
                 </div>
                 <h1 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
-                  {category.name}
+                  {name}
                 </h1>
                 <p className="mt-2 text-white/70 text-sm sm:text-base">
-                  {category.productCount} products available · Sourced from
-                  China, delivered across Africa
+                  {format(C.available, { n: category.productCount })}
                 </p>
               </div>
             </div>
@@ -92,7 +96,7 @@ export function CategoryBrowser({
           <div className="border-b border-border bg-surface">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-navy mr-2">Sub-Categories:</span>
+                <span className="text-sm font-semibold text-navy mr-2">{C.subCategories}</span>
                 <button
                   onClick={() => setSelectedSubCategory("all")}
                   className={cn(
@@ -102,7 +106,7 @@ export function CategoryBrowser({
                       : "bg-surface-secondary text-text-secondary hover:bg-border"
                   )}
                 >
-                  All
+                  {C.all}
                 </button>
                 {subCategories.map((subCat) => (
                   <button
@@ -115,7 +119,7 @@ export function CategoryBrowser({
                         : "bg-surface-secondary text-text-secondary hover:bg-border"
                     )}
                   >
-                    {subCat.name}
+                    {subCategoryName(t, subCat.slug, subCat.name)}
                     <span className="ml-1 opacity-60">({subCat.productCount})</span>
                   </button>
                 ))}
@@ -130,14 +134,13 @@ export function CategoryBrowser({
             <>
               <div className="flex items-center justify-between mb-6">
                 <p className="text-sm text-text-secondary">
-                  Showing {categoryProducts.length}{" "}
-                  {categoryProducts.length === 1 ? "product" : "products"}
+                  {categoryProducts.length === 1 ? C.showingOne : format(C.showing, { n: categoryProducts.length })}
                 </p>
                 <Link
                   href="/products"
                   className="flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-hover"
                 >
-                  View all products
+                  {C.viewAll}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
@@ -153,17 +156,16 @@ export function CategoryBrowser({
                 <Package className="h-8 w-8 text-text-disabled" />
               </div>
               <h3 className="text-lg font-semibold text-navy mb-1">
-                No products in this category yet
+                {C.emptyTitle}
               </h3>
               <p className="text-text-secondary text-sm mb-4">
-                We're sourcing new products for this category. Check back soon or
-                request a custom quote.
+                {C.emptyText}
               </p>
               <Link
                 href="/quote"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
               >
-                Request a Quote
+                {C.requestQuote}
               </Link>
             </div>
           )}
@@ -171,7 +173,7 @@ export function CategoryBrowser({
           {/* Other Categories */}
           <div className="mt-16 pt-8 border-t border-border">
             <h2 className="text-lg font-bold text-navy mb-4">
-              Browse other categories
+              {C.browseOther}
             </h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               {allCategories
@@ -186,7 +188,7 @@ export function CategoryBrowser({
                       {cat.image ? (
                         <Image
                           src={cat.image}
-                          alt={cat.name}
+                          alt={categoryName(t, cat.slug, cat.name)}
                           fill
                           sizes="48px"
                           className="object-cover"
@@ -198,7 +200,7 @@ export function CategoryBrowser({
                       )}
                     </div>
                     <span className="text-xs font-medium text-text-primary text-center group-hover:text-brand transition-colors">
-                      {cat.name}
+                      {categoryName(t, cat.slug, cat.name)}
                     </span>
                   </Link>
                 ))}
@@ -212,22 +214,24 @@ export function CategoryBrowser({
 }
 
 export function CategoryNotFound() {
+  const { t } = useI18n();
+  const C = t.catalog.category;
   return (
     <>
       <Navbar />
       <main className="min-h-screen pt-16 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-navy mb-2">
-            Category not found
+            {C.notFoundTitle}
           </h1>
           <p className="text-text-secondary mb-4">
-            The category you're looking for doesn't exist.
+            {C.notFoundText}
           </p>
           <Link
             href="/products"
             className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
           >
-            Browse all products
+            {C.browseAll}
           </Link>
         </div>
       </main>

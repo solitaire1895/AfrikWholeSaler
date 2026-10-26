@@ -17,6 +17,7 @@ export function mapMessageRow(row: {
   attachments: string[] | null;
   is_internal_note: boolean;
   created_at: string;
+  read_at?: string | null;
 }): Message {
   const role =
     row.sender_type === "agent"
@@ -33,6 +34,7 @@ export function mapMessageRow(row: {
     attachments: row.attachments ?? [],
     isInternalNote: row.is_internal_note,
     createdAt: row.created_at,
+    readAt: row.read_at ?? null,
   };
 }
 
@@ -71,7 +73,7 @@ export async function fetchMessages(conversationId: string): Promise<Message[]> 
   const { data, error } = await supabase
     .from("messages")
     .select(
-      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at"
+      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at, read_at"
     )
     .eq("conversation_id", conversationId)
     .eq("is_internal_note", false)
@@ -112,7 +114,7 @@ export async function fetchRecentMessages(limit = 8): Promise<Message[]> {
   const { data, error } = await supabase
     .from("messages")
     .select(
-      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at"
+      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at, read_at"
     )
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -129,7 +131,7 @@ export async function fetchAllMessages(conversationId: string): Promise<Message[
   const { data, error } = await supabase
     .from("messages")
     .select(
-      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at"
+      "id, conversation_id, sender_type, sender_id, content, attachments, is_internal_note, created_at, read_at"
     )
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });

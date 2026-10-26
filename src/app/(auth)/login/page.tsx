@@ -6,13 +6,24 @@ import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox, Divider, SocialButton } from "@/components/ui/auth-helpers";
+import { Checkbox } from "@/components/ui/auth-helpers";
 import { createClient } from "@/lib/supabase/client";
+import { useT } from "@/i18n/client";
+import { authErrorMessage } from "@/i18n/auth-errors";
+
+function isSafeRedirect(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\");
+}
 
 function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/dashboard";
+  // Only same-site paths: "/dashboard/orders" is fine; "https://…", "//…" and "/\…" are not.
+  const requested = searchParams.get("redirect") ?? "";
+  const redirect = isSafeRedirect(requested) ? requested : "/products";
+  const t = useT();
+  const L = t.auth.login;
+  const E = t.auth.errors;
 
   const [showPassword, setShowPassword] = useState(false);
   // Default to true so users stay logged in across visits (30-day persistent cookies).
@@ -26,9 +37,9 @@ function LoginPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { email?: string; password?: string } = {};
-    if (!email) newErrors.email = "Email is required";
-    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = "Invalid email format";
-    if (!password) newErrors.password = "Password is required";
+    if (!email) newErrors.email = E.emailRequired;
+    else if (!/\S+@\S+\.\S+/.test(email)) newErrors.email = E.emailInvalid;
+    if (!password) newErrors.password = E.passwordRequired;
     setErrors(newErrors);
 
     if (Object.keys(newErrors).length === 0) {
@@ -41,7 +52,7 @@ function LoginPageContent() {
         });
 
         if (error) {
-          setErrors({ general: error.message });
+          setErrors({ general: authErrorMessage(t, error.message) });
         } else {
           // If "Remember me" is unchecked, downgrade the persistent cookies
           // (30-day expiry) to session-only cookies that expire when the
@@ -61,7 +72,7 @@ function LoginPageContent() {
           router.refresh();
         }
       } catch {
-        setErrors({ general: "An unexpected error occurred. Please try again." });
+        setErrors({ general: E.unexpected });
       } finally {
         setLoading(false);
       }
@@ -73,25 +84,20 @@ function LoginPageContent() {
       {/* Header */}
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-navy tracking-tight mb-2">
-          Welcome back
+          {L.title}
         </h2>
         <p className="text-sm text-text-secondary">
-          Sign in to your AfrikWholesaler account to continue sourcing
+          {L.lead}
         </p>
+        {searchParams.get("message") === "check_email" && (
+          <p className="mt-4 rounded-[var(--radius-md)] border border-info/20 bg-info/5 p-3 text-sm text-info">{L.checkEmail}</p>
+        )}
       </div>
-
-      {/* Social Login */}
-      <div className="grid grid-cols-2 gap-3 mb-2">
-        <SocialButton provider="google" />
-        <SocialButton provider="apple" />
-      </div>
-
-      <Divider label="or sign in with email" />
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input
-          label="Email address"
+          label={L.email}
           type="email"
           name="email"
           placeholder="you@company.com"
@@ -105,13 +111,13 @@ function LoginPageContent() {
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-sm font-medium text-text-primary">
-              Password
+              {L.password}
             </label>
             <Link
               href="/forgot-password"
               className="text-xs font-medium text-brand hover:text-brand-hover transition-colors"
             >
-              Forgot password?
+              {L.forgot}
             </Link>
           </div>
           <div className="relative">
@@ -119,7 +125,7 @@ function LoginPageContent() {
             <input
               type={showPassword ? "text" : "password"}
               name="password"
-              placeholder="Enter your password"
+              placeholder={L.passwordPlaceholder}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full h-12 rounded-[var(--radius-input)] border border-border bg-surface pl-11 pr-11 text-sm text-text-primary placeholder:text-text-disabled transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
@@ -128,7 +134,7 @@ function LoginPageContent() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-secondary transition-colors"
-              aria-label="Toggle password visibility"
+              aria-label={L.togglePassword}
             >
               {showPassword ? (
                 <EyeOff className="h-4 w-4" />
@@ -150,7 +156,7 @@ function LoginPageContent() {
             id="remember"
             checked={rememberMe}
             onChange={setRememberMe}
-            label="Remember me"
+            label={L.remember}
           />
         </div>
 
@@ -166,11 +172,11 @@ function LoginPageContent() {
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Signing in...
+              {L.signingIn}
             </>
           ) : (
             <>
-              Sign In
+              {L.signIn}
               <ArrowRight className="h-4 w-4" />
             </>
           )}
@@ -179,12 +185,12 @@ function LoginPageContent() {
 
       {/* Footer Link */}
       <p className="mt-8 text-center text-sm text-text-secondary">
-        Don't have an account?{" "}
+        {L.noAccount}{" "}
         <Link
           href="/register"
           className="font-semibold text-brand hover:text-brand-hover transition-colors"
         >
-          Sign up for free
+          {L.signUp}
         </Link>
       </p>
     </div>

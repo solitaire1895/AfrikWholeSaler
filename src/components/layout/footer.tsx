@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import {
   Package,
@@ -6,6 +8,9 @@ import {
   MapPin,
   ArrowRight,
 } from "lucide-react";
+import { useI18n } from "@/i18n/client";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
+import { CurrencySwitcher } from "@/components/layout/currency-switcher";
 
 // Social media icons (lucide-react removed brand icons, using inline SVGs)
 function FacebookIcon({ className }: { className?: string }) {
@@ -40,37 +45,6 @@ function InstagramIcon({ className }: { className?: string }) {
   );
 }
 
-const footerLinks = {
-  Company: [
-    { label: "About Us", href: "/about" },
-    { label: "How It Works", href: "/how-it-works" },
-    { label: "Our Process", href: "/process" },
-    { label: "Careers", href: "/careers" },
-    { label: "Contact", href: "/contact" },
-  ],
-  Products: [
-    { label: "All Products", href: "/products" },
-    { label: "Categories", href: "/categories" },
-    { label: "Featured", href: "/products?filter=featured" },
-    { label: "Best Sellers", href: "/products?filter=best-seller" },
-    { label: "New Arrivals", href: "/products?filter=new" },
-  ],
-  Services: [
-    { label: "Request a Quote", href: "/quote" },
-    { label: "Quality Inspection", href: "/quality" },
-    { label: "Shipping & Logistics", href: "/shipping" },
-    { label: "Custom Sourcing", href: "/sourcing" },
-    { label: "Private Label", href: "/private-label" },
-  ],
-  Support: [
-    { label: "Help Center", href: "/help" },
-    { label: "Track Order", href: "/track" },
-    { label: "FAQ", href: "/faq" },
-    { label: "Terms of Service", href: "/terms" },
-    { label: "Privacy Policy", href: "/privacy" },
-  ],
-};
-
 const socialLinks = [
   { icon: FacebookIcon, href: "#", label: "Facebook" },
   { icon: TwitterIcon, href: "#", label: "Twitter" },
@@ -79,6 +53,53 @@ const socialLinks = [
 ];
 
 export function Footer() {
+  const { t, format } = useI18n();
+  const f = t.layout.footer;
+  const footerLinks = [
+    {
+      title: f.company,
+      links: [
+        { label: f.aboutUs, href: "/about" },
+        { label: f.howItWorks, href: "/how-it-works" },
+        { label: f.ourProcess, href: "/process" },
+        { label: f.careers, href: "/careers" },
+        { label: f.contact, href: "/contact" },
+      ],
+    },
+    {
+      title: f.productsTitle,
+      links: [
+        { label: f.allProducts, href: "/products" },
+        { label: f.categories, href: "/categories" },
+        { label: f.featured, href: "/products?filter=featured" },
+        { label: f.bestSellers, href: "/products?filter=best-seller" },
+        { label: f.newArrivals, href: "/products?filter=new" },
+      ],
+    },
+    {
+      title: f.services,
+      links: [
+        { label: f.requestQuote, href: "/quote" },
+        { label: t.tracking.trackOrder, href: "/track" },
+        { label: f.qualityInspection, href: "/quality" },
+        { label: f.shipping, href: "/shipping" },
+        { label: f.customSourcing, href: "/sourcing" },
+        { label: f.privateLabel, href: "/private-label" },
+        { label: f.affiliateProgram, href: "/#affiliate" },
+      ],
+    },
+    {
+      title: f.support,
+      links: [
+        { label: f.helpCenter, href: "/help" },
+        { label: f.trackOrder, href: "/track" },
+        { label: f.faq, href: "/faq" },
+        { label: f.terms, href: "/terms" },
+        { label: f.privacy, href: "/privacy" },
+      ],
+    },
+  ];
+
   return (
     <footer className="gradient-dark text-white">
       {/* Newsletter Section */}
@@ -87,21 +108,20 @@ export function Footer() {
           <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
             <div className="text-center lg:text-left">
               <h3 className="text-2xl font-bold tracking-tight">
-                Stay updated on new products and deals
+                {f.newsletterTitle}
               </h3>
               <p className="mt-2 text-white/60 text-sm">
-                Get sourcing insights, product alerts, and exclusive offers
-                delivered to your inbox.
+                {f.newsletterText}
               </p>
             </div>
             <div className="flex w-full max-w-md gap-3">
               <input
                 type="email"
-                placeholder="Enter your email"
+                placeholder={f.emailPlaceholder}
                 className="flex-1 h-12 rounded-[var(--radius-input)] border border-white/15 bg-white/5 px-4 text-sm text-white placeholder:text-white/40 focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/20 transition-all"
               />
               <button className="flex h-12 items-center gap-2 rounded-[var(--radius-button)] bg-gold px-6 text-sm font-semibold text-navy hover:brightness-95 transition-all shrink-0">
-                Subscribe
+                {f.subscribe}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -123,9 +143,7 @@ export function Footer() {
               </span>
             </Link>
             <p className="text-sm text-white/60 leading-relaxed max-w-xs">
-              Your trusted B2B sourcing partner. We connect African businesses
-              with quality products from China — handling sourcing, QC,
-              logistics, and delivery.
+              {f.about}
             </p>
             <div className="mt-6 space-y-3">
               <div className="flex items-center gap-3 text-sm text-white/70">
@@ -138,13 +156,13 @@ export function Footer() {
               </div>
               <div className="flex items-center gap-3 text-sm text-white/70">
                 <MapPin className="h-4 w-4 text-gold" />
-                <span>Douala, Cameroon · Shenzhen, China</span>
+                <span>{f.location}</span>
               </div>
             </div>
           </div>
 
           {/* Link Columns */}
-          {Object.entries(footerLinks).map(([title, links]) => (
+          {footerLinks.map(({ title, links }) => (
             <div key={title}>
               <h4 className="text-sm font-semibold text-white mb-4">{title}</h4>
               <ul className="space-y-3">
@@ -169,10 +187,11 @@ export function Footer() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-white/50">
-              © {new Date().getFullYear()} AfrikWholesaler. All rights reserved.
-              Powered by AfrikWholesaler Inc.
+              {format(f.rights, { year: new Date().getFullYear() })}
             </p>
             <div className="flex items-center gap-3">
+              <CurrencySwitcher tone="dark" direction="up" />
+              <LanguageSwitcher tone="dark" direction="up" />
               {socialLinks.map((social) => (
                 <a
                   key={social.label}

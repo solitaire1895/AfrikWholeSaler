@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
@@ -19,23 +20,27 @@ import {
   Menu,
   X,
   ChevronRight,
+  Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logout } from "@/app/actions/auth";
+import { useT } from "@/i18n/client";
+import { LanguageSwitcher } from "@/components/layout/language-switcher";
 
 const navItems = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/products", label: "Products", icon: Package },
-  { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/admin/customers", label: "Customers", icon: Users },
-  { href: "/admin/quotes", label: "Quote Queue", icon: FileText },
-  { href: "/admin/purchase-requests", label: "Purchase Requests", icon: ClipboardList },
-  { href: "/admin/shipments", label: "Shipments", icon: Truck },
-  { href: "/admin/messages", label: "Messages", icon: MessageCircle },
-  { href: "/admin/inventory", label: "Inventory", icon: PackageCheck },
-  { href: "/admin/staff", label: "Staff & Roles", icon: ShieldCheck },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
-];
+  { href: "/admin", key: "overview", icon: LayoutDashboard },
+  { href: "/admin/products", key: "products", icon: Package },
+  { href: "/admin/orders", key: "orders", icon: ShoppingBag },
+  { href: "/admin/customers", key: "customers", icon: Users },
+  { href: "/admin/quotes", key: "quotes", icon: FileText },
+  { href: "/admin/purchase-requests", key: "purchaseRequests", icon: ClipboardList },
+  { href: "/admin/shipments", key: "shipments", icon: Truck },
+  { href: "/admin/messages", key: "messages", icon: MessageCircle },
+  { href: "/admin/affiliates", key: "affiliates", icon: Coins },
+  { href: "/admin/inventory", key: "inventory", icon: PackageCheck },
+  { href: "/admin/staff", key: "staff", icon: ShieldCheck },
+  { href: "/admin/settings", key: "settings", icon: Settings },
+] as const;
 
 export function AdminShell({
   children,
@@ -53,12 +58,16 @@ export function AdminShell({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoggingOut, startLogout] = useTransition();
+  const t = useT();
+  const S = t.admin.shell;
 
   const initials = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "AD";
-  const roleLabel = user.role
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  const roleLabel =
+    (t.admin.roles as Record<string, string>)[user.role] ??
+    user.role
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
 
   function handleLogout() {
     startLogout(async () => {
@@ -74,6 +83,7 @@ export function AdminShell({
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label={S.menu}
               className="lg:hidden flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] text-white hover:bg-white/10"
             >
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -87,7 +97,7 @@ export function AdminShell({
                   Afrik<span className="text-gold">Wholesaler</span>
                 </span>
                 <span className="ml-2 text-xs font-medium text-gold bg-gold/10 px-2 py-0.5 rounded-full">
-                  Admin
+                  {S.badge}
                 </span>
               </div>
             </Link>
@@ -97,8 +107,10 @@ export function AdminShell({
               href="/"
               className="text-sm font-medium text-white/60 hover:text-white hidden sm:block"
             >
-              View Site
+              {S.viewSite}
             </Link>
+            <LanguageSwitcher tone="dark" />
+            <NotificationBell tone="dark" />
             <div className="flex items-center gap-2 pl-3 border-l border-white/10">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gold text-navy font-semibold text-sm">
                 {initials}
@@ -126,7 +138,7 @@ export function AdminShell({
         >
           <nav className="p-4 space-y-1">
             <p className="px-3 py-2 text-xs font-semibold text-text-disabled uppercase tracking-wide">
-              Management
+              {S.management}
             </p>
             {navItems.map((item) => {
               const isActive =
@@ -145,7 +157,7 @@ export function AdminShell({
                   )}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  {S.nav[item.key]}
                   {isActive && <ChevronRight className="h-4 w-4 ml-auto" />}
                 </Link>
               );
@@ -158,7 +170,7 @@ export function AdminShell({
                 className="flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-sm)] text-sm font-medium text-text-secondary hover:bg-surface-secondary hover:text-text-primary transition-colors w-full disabled:opacity-50"
               >
                 <LogOut className="h-4 w-4" />
-                {isLoggingOut ? "Signing out..." : "Sign Out"}
+                {isLoggingOut ? S.signingOut : S.signOut}
               </button>
             </div>
           </nav>

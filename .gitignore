@@ -40,3 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .aider*
+
+# Source media and design references (not used by the app; optimized copies live in public/landing)
+/assets/
+/design changes/
+
+# Sentry build plugin
+.env.sentry-build-plugin

@@ -1,12 +1,10 @@
+import Link from "next/link";
 import {
   Truck,
-  Package,
   CheckCircle,
   Circle,
   Clock,
   MapPin,
-  Copy,
-  ExternalLink,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import {
@@ -15,6 +13,7 @@ import {
   getOrdersByCustomer,
 } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { getI18n } from "@/i18n/server";
 
 export default async function ShipmentsPage() {
   const customer = await getCurrentCustomer();
@@ -24,16 +23,19 @@ export default async function ShipmentsPage() {
     getShipmentsByCustomer(customer.id),
     getOrdersByCustomer(customer.id),
   ]);
+  const { t, format, formatDate } = await getI18n();
+  const S = t.account.shipments;
+  const milestoneName = (s: string) => (t.status.shipment as Record<string, string>)[s] ?? s;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-navy tracking-tight">
-          Shipment Tracking
+          {S.title}
         </h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Track your shipments from sourcing to delivery.
+          {S.lead}
         </p>
       </div>
 
@@ -73,23 +75,22 @@ export default async function ShipmentsPage() {
                               : "bg-brand/10 text-brand border-brand/20"
                           )}
                         >
-                          {isDelivered ? "Delivered" : "In Transit"}
+                          {isDelivered ? S.delivered : S.inTransit}
                         </span>
                       </div>
                       <p className="text-sm text-text-secondary">
                         {shipment.carrier} · {shipment.trackingNumber}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
-                        <Copy className="h-3.5 w-3.5" />
-                        Copy
-                      </button>
-                      <button className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors">
-                        <ExternalLink className="h-3.5 w-3.5" />
-                        Track on {shipment.carrier.split(" ")[0]}
-                      </button>
-                    </div>
+                    {shipment.orderId && (
+                      <Link
+                        href={`/dashboard/orders/${shipment.orderId}`}
+                        className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-hover transition-colors"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        {t.tracking.trackOrder}
+                      </Link>
+                    )}
                   </div>
 
                   {/* Progress Bar */}
@@ -106,11 +107,10 @@ export default async function ShipmentsPage() {
                   </div>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-xs text-text-secondary">
-                      {completedCount} of {shipment.milestones.length} milestones
-                      completed
+                      {format(S.milestones, { done: completedCount, total: shipment.milestones.length })}
                     </span>
                     <span className="text-xs font-medium text-text-secondary">
-                      Est. delivery: {shipment.estimatedDelivery}
+                      {format(S.estimated, { date: shipment.estimatedDelivery })}
                     </span>
                   </div>
                 </div>
@@ -118,7 +118,7 @@ export default async function ShipmentsPage() {
                 {/* Milestone Timeline */}
                 <div className="p-5">
                   <h4 className="text-xs font-semibold text-text-disabled uppercase tracking-wide mb-4">
-                    Shipment Timeline
+                    {S.timeline}
                   </h4>
                   <div className="space-y-0">
                     {shipment.milestones.map((milestone, idx) => {
@@ -162,13 +162,13 @@ export default async function ShipmentsPage() {
                                     : "text-text-secondary"
                                 )}
                               >
-                                {milestone.status}
+                                {milestoneName(milestone.status)}
                               </p>
                               {!milestone.completed &&
                                 currentMilestone?.status === milestone.status && (
                                   <span className="inline-flex items-center gap-1 text-xs font-medium text-brand">
                                     <Clock className="h-3 w-3" />
-                                    Current
+                                    {S.current}
                                   </span>
                                 )}
                             </div>
@@ -178,21 +178,18 @@ export default async function ShipmentsPage() {
                             </div>
                             {milestone.timestamp && (
                               <p className="text-xs text-text-disabled">
-                                {new Date(milestone.timestamp).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    year: "numeric",
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }
-                                )}
+                                {formatDate(milestone.timestamp, {
+                                  year: "numeric",
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
                               </p>
                             )}
                             {!milestone.timestamp && !milestone.completed && (
                               <p className="text-xs text-text-disabled italic">
-                                Pending
+                                {S.pending}
                               </p>
                             )}
                           </div>
@@ -207,14 +204,13 @@ export default async function ShipmentsPage() {
                   <div className="px-5 pb-5">
                     <div className="rounded-[var(--radius-sm)] bg-surface-secondary/50 p-4">
                       <p className="text-xs font-semibold text-text-disabled uppercase tracking-wide mb-2">
-                        Order Contents
+                        {S.contents}
                       </p>
                       <p className="text-sm text-text-primary">
-                        {order.items.length}{" "}
-                        {order.items.length === 1 ? "item" : "items"}:{" "}
-                        {order.items
-                          .map((i) => `${i.productName} (${i.quantity} units)`)
-                          .join(", ")}
+                        {format(order.items.length === 1 ? S.contentsLineOne : S.contentsLine, {
+                          n: order.items.length,
+                          list: order.items.map((i) => format(S.itemUnits, { name: i.productName, n: i.quantity })).join(", "),
+                        })}
                       </p>
                     </div>
                   </div>
@@ -229,10 +225,10 @@ export default async function ShipmentsPage() {
             <Truck className="h-8 w-8 text-text-disabled" />
           </div>
           <h3 className="text-lg font-semibold text-navy mb-1">
-            No shipments yet
+            {S.emptyTitle}
           </h3>
           <p className="text-text-secondary text-sm">
-            Your shipments will appear here once your orders are shipped.
+            {S.emptyText}
           </p>
         </Card>
       )}

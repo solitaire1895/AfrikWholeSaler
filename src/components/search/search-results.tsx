@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, Package, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
 import { cn } from "@/lib/utils";
 import type { Product, Category } from "@/types";
+import { useI18n } from "@/i18n/client";
+import { categoryName } from "@/i18n/names";
 
 interface SearchResultsProps {
   query: string;
@@ -26,13 +28,6 @@ interface SearchResult {
   facets: { categories: Record<string, number> };
 }
 
-const sortOptions = [
-  { value: "relevance", label: "Relevance" },
-  { value: "price_asc", label: "Price: Low to High" },
-  { value: "price_desc", label: "Price: High to Low" },
-  { value: "newest", label: "Newest" },
-  { value: "rating", label: "Top Rated" },
-];
 
 export function SearchResults({
   query: initialQuery,
@@ -45,8 +40,15 @@ export function SearchResults({
   categories,
 }: SearchResultsProps) {
   const router = useRouter();
-  const [data, setData] = useState<SearchResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { t, format } = useI18n();
+  const S = t.catalog.search;
+  const sortOptions = [
+    { value: "relevance", label: S.sortRelevance },
+    { value: "price_asc", label: S.sortPriceAsc },
+    { value: "price_desc", label: S.sortPriceDesc },
+    { value: "newest", label: S.sortNewest },
+    { value: "rating", label: S.sortRating },
+  ];
   const [showFilters, setShowFilters] = useState(false);
 
   // Local filter state
@@ -56,31 +58,34 @@ export function SearchResults({
   const [maxPrice, setMaxPrice] = useState(initialMaxPrice?.toString() || "");
   const [inStockOnly, setInStockOnly] = useState(initialInStock);
 
-  const fetchResults = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (initialQuery) params.set("q", initialQuery);
-      if (selectedCategory) params.set("category", selectedCategory);
-      if (selectedSort) params.set("sort", selectedSort);
-      params.set("page", String(initialPage));
-      if (minPrice) params.set("minPrice", minPrice);
-      if (maxPrice) params.set("maxPrice", maxPrice);
-      if (inStockOnly) params.set("inStock", "true");
-
-      const res = await fetch(`/api/search?${params.toString()}`);
-      const json = await res.json();
-      setData(json);
-    } catch {
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
+  // The request for the current filters; results are kept per request, so a
+  // slow older response can never overwrite a newer one.
+  const requestQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (initialQuery) params.set("q", initialQuery);
+    if (selectedCategory) params.set("category", selectedCategory);
+    if (selectedSort) params.set("sort", selectedSort);
+    params.set("page", String(initialPage));
+    if (minPrice) params.set("minPrice", minPrice);
+    if (maxPrice) params.set("maxPrice", maxPrice);
+    if (inStockOnly) params.set("inStock", "true");
+    return params.toString();
   }, [initialQuery, selectedCategory, selectedSort, initialPage, minPrice, maxPrice, inStockOnly]);
 
+  const [result, setResult] = useState<{ query: string; data: SearchResult | null } | null>(null);
+  const loading = result?.query !== requestQuery;
+  const data = result?.data ?? null;
+
   useEffect(() => {
-    fetchResults();
-  }, [fetchResults]);
+    let active = true;
+    fetch(`/api/search?${requestQuery}`)
+      .then((res) => res.json())
+      .then((json: SearchResult) => active && setResult({ query: requestQuery, data: json }))
+      .catch(() => active && setResult({ query: requestQuery, data: null }));
+    return () => {
+      active = false;
+    };
+  }, [requestQuery]);
 
   function updateUrl(key: string, value: string) {
     const params = new URLSearchParams(window.location.search);
@@ -97,8 +102,6 @@ export function SearchResults({
     if (maxPrice) updateUrl("maxPrice", maxPrice);
     if (inStockOnly) updateUrl("inStock", "true");
     setShowFilters(false);
-    // Force re-fetch
-    fetchResults();
   }
 
   function handlePageChange(newPage: number) {
@@ -143,10 +146,10 @@ export function SearchResults({
       {/* Search header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-navy tracking-tight">
-          {initialQuery ? `Results for "${initialQuery}"` : "All Products"}
+          {initialQuery ? format(S.resultsFor, { q: initialQuery }) : S.allProducts}
         </h1>
         <p className="mt-1 text-sm text-text-secondary">
-          {loading ? "Searching..." : `${data?.total || 0} products found`}
+          {loading ? S.searching : format(S.found, { n: data?.total || 0 })}
         </p>
       </div>
 
@@ -157,7 +160,7 @@ export function SearchResults({
           className="flex items-center gap-2 rounded-[var(--radius-button)] border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
         >
           <SlidersHorizontal className="h-4 w-4" />
-          Filters
+          {S.filters}
         </button>
 
         <select
@@ -180,7 +183,7 @@ export function SearchResults({
           <aside className="w-64 shrink-0 space-y-6">
             {/* Category filter */}
             <div>
-              <h3 className="text-sm font-semibold text-navy mb-2">Category</h3>
+              <h3 className="text-sm font-semibold text-navy mb-2">{S.category}</h3>
               <div className="space-y-1">
                 <button
                   onClick={() => {
@@ -192,7 +195,7 @@ export function SearchResults({
                     !selectedCategory ? "bg-brand-light text-brand font-medium" : "text-text-secondary hover:bg-surface-secondary"
                   )}
                 >
-                  All Categories
+                  {S.allCategories}
                 </button>
                 {categories.map((cat) => (
                   <button
@@ -206,7 +209,7 @@ export function SearchResults({
                       selectedCategory === cat.slug ? "bg-brand-light text-brand font-medium" : "text-text-secondary hover:bg-surface-secondary"
                     )}
                   >
-                    {cat.name}
+                    {categoryName(t, cat.slug, cat.name)}
                     {data?.facets?.categories?.[cat.name] && (
                       <span className="ml-1 text-xs text-text-disabled">({data.facets.categories[cat.name]})</span>
                     )}
@@ -217,20 +220,20 @@ export function SearchResults({
 
             {/* Price filter */}
             <div>
-              <h3 className="text-sm font-semibold text-navy mb-2">Price Range (USD)</h3>
+              <h3 className="text-sm font-semibold text-navy mb-2">{S.priceRange}</h3>
               <div className="flex gap-2">
                 <input
                   type="number"
                   value={minPrice}
                   onChange={(e) => setMinPrice(e.target.value)}
-                  placeholder="Min"
+                  placeholder={S.min}
                   className="w-full h-9 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-sm focus:border-brand focus:outline-none"
                 />
                 <input
                   type="number"
                   value={maxPrice}
                   onChange={(e) => setMaxPrice(e.target.value)}
-                  placeholder="Max"
+                  placeholder={S.max}
                   className="w-full h-9 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-sm focus:border-brand focus:outline-none"
                 />
               </div>
@@ -238,7 +241,7 @@ export function SearchResults({
                 onClick={applyFilters}
                 className="mt-2 w-full h-9 rounded-[var(--radius-sm)] bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition-colors"
               >
-                Apply
+                {S.apply}
               </button>
             </div>
 
@@ -254,7 +257,7 @@ export function SearchResults({
                   }}
                   className="h-4 w-4 rounded border-border"
                 />
-                In Stock Only
+                {S.inStockOnly}
               </label>
             </div>
           </aside>
@@ -279,6 +282,7 @@ export function SearchResults({
                 <div className="flex items-center justify-center gap-2 mt-8">
                   <button
                     onClick={() => handlePageChange(initialPage - 1)}
+                    aria-label={S.previousPage}
                     disabled={initialPage <= 1}
                     className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border border-border text-text-secondary hover:bg-surface-secondary disabled:opacity-30"
                   >
@@ -303,6 +307,7 @@ export function SearchResults({
                   })}
                   <button
                     onClick={() => handlePageChange(initialPage + 1)}
+                    aria-label={S.nextPage}
                     disabled={initialPage >= totalPages}
                     className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border border-border text-text-secondary hover:bg-surface-secondary disabled:opacity-30"
                   >
@@ -316,11 +321,11 @@ export function SearchResults({
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
                 <Package className="h-8 w-8 text-text-disabled" />
               </div>
-              <h3 className="text-lg font-semibold text-navy mb-1">No products found</h3>
+              <h3 className="text-lg font-semibold text-navy mb-1">{S.emptyTitle}</h3>
               <p className="text-text-secondary text-sm mb-4">
                 {initialQuery
-                  ? `We couldn't find any products matching "${initialQuery}". Try different keywords or filters.`
-                  : "Try adjusting your filters to see more results."}
+                  ? format(S.emptyQuery, { q: initialQuery })
+                  : S.emptyNoQuery}
               </p>
             </div>
           )}

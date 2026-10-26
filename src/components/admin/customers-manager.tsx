@@ -26,6 +26,7 @@ import {
   deleteUser,
 } from "@/app/actions/crud";
 import type { Customer } from "@/types";
+import { useI18n } from "@/i18n/client";
 
 interface CustomersManagerProps {
   customers: Customer[];
@@ -44,16 +45,16 @@ const roleColors: Record<string, string> = {
   customer: "bg-surface-secondary text-text-secondary border-border",
 };
 
-const roleLabels: Record<string, string> = {
-  super_admin: "Super Admin",
-  admin: "Admin",
-  sales_rep: "Sales Agent",
-  support_agent: "Customer Support",
-  warehouse_staff: "Warehouse Staff",
-  logistics_staff: "Logistics Coordinator",
-  operations_manager: "Operations Manager",
-  customer: "Customer",
-};
+const roleKeys = [
+  "super_admin",
+  "admin",
+  "sales_rep",
+  "support_agent",
+  "warehouse_staff",
+  "logistics_staff",
+  "operations_manager",
+  "customer",
+] as const;
 
 const verificationColors: Record<string, string> = {
   Verified: "bg-success/10 text-success border-success/20",
@@ -73,6 +74,11 @@ export function CustomersManager({
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
+  const { t, formatNumber, formatDate } = useI18n();
+  const K = t.admin.customers;
+  const C = t.admin.common;
+  const roleLabels = t.admin.roles as Record<string, string>;
+  const verificationLabel = (v: string) => (K.verification as Record<string, string>)[v] ?? v;
 
   const isAdmin = ["admin", "super_admin"].includes(currentUserRole);
 
@@ -97,7 +103,7 @@ export function CustomersManager({
     startTransition(async () => {
       const result = await updateCustomerVerification(customerId, status);
       if (!result.success) {
-        setError(result.error || "Failed to update verification status");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -107,19 +113,19 @@ export function CustomersManager({
 
   function handleRoleChange(customer: Customer, newRole: string) {
     if (!customer.userId) {
-      setError("This customer has no associated user account.");
+      setError(K.noAccount);
       return;
     }
     const userId = customer.userId;
     if (userId === currentUserId) {
-      setError("You cannot change your own role.");
+      setError(K.ownRole);
       return;
     }
     setPendingAction(`${customer.id}-role-${newRole}`);
     startTransition(async () => {
       const result = await updateUserRole(userId, newRole);
       if (!result.success) {
-        setError(result.error || "Failed to update role");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -129,19 +135,19 @@ export function CustomersManager({
 
   function handleSuspend(customer: Customer) {
     if (!customer.userId) {
-      setError("This customer has no associated user account.");
+      setError(K.noAccount);
       return;
     }
     const userId = customer.userId;
     if (userId === currentUserId) {
-      setError("You cannot suspend your own account.");
+      setError(K.ownSuspend);
       return;
     }
     setPendingAction(`${customer.id}-suspend`);
     startTransition(async () => {
       const result = await suspendUser(userId);
       if (!result.success) {
-        setError(result.error || "Failed to suspend user");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -151,7 +157,7 @@ export function CustomersManager({
 
   function handleUnsuspend(customer: Customer) {
     if (!customer.userId) {
-      setError("This customer has no associated user account.");
+      setError(K.noAccount);
       return;
     }
     const userId = customer.userId;
@@ -159,7 +165,7 @@ export function CustomersManager({
     startTransition(async () => {
       const result = await unsuspendUser(userId);
       if (!result.success) {
-        setError(result.error || "Failed to unsuspend user");
+        setError(result.error || C.failed);
       } else {
         window.location.reload();
       }
@@ -169,19 +175,19 @@ export function CustomersManager({
 
   function handleDelete(customer: Customer) {
     if (!customer.userId) {
-      setError("This customer has no associated user account.");
+      setError(K.noAccount);
       return;
     }
     const userId = customer.userId;
     if (userId === currentUserId) {
-      setError("You cannot delete your own account.");
+      setError(K.ownDelete);
       return;
     }
     setPendingAction(`${customer.id}-delete`);
     startTransition(async () => {
       const result = await deleteUser(userId);
       if (!result.success) {
-        setError(result.error || "Failed to delete user");
+        setError(result.error || C.failed);
       } else {
         setDeleteTarget(null);
         window.location.reload();
@@ -194,9 +200,9 @@ export function CustomersManager({
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-navy tracking-tight">Customers</h1>
+        <h1 className="text-2xl font-bold text-navy tracking-tight">{K.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Manage customer accounts, roles, verification, and access.
+          {K.lead}
         </p>
       </div>
 
@@ -206,6 +212,7 @@ export function CustomersManager({
           <span>{error}</span>
           <button
             onClick={() => setError(null)}
+            aria-label={C.dismiss}
             className="text-error/70 hover:text-error"
           >
             <X className="h-4 w-4" />
@@ -219,7 +226,7 @@ export function CustomersManager({
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
           <input
             type="text"
-            placeholder="Search by name, email, or company..."
+            placeholder={K.search}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm focus:border-brand focus:outline-none"
@@ -230,20 +237,20 @@ export function CustomersManager({
           onChange={(e) => setStatusFilter(e.target.value)}
           className="h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
         >
-          <option value="All">All Statuses</option>
-          <option value="Verified">Verified</option>
-          <option value="Pending">Pending</option>
-          <option value="Unverified">Unverified</option>
+          <option value="All">{C.allStatuses}</option>
+          <option value="Verified">{K.verification.Verified}</option>
+          <option value="Pending">{K.verification.Pending}</option>
+          <option value="Unverified">{K.verification.Unverified}</option>
         </select>
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
           className="h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
         >
-          <option value="All">All Roles</option>
-          {Object.entries(roleLabels).map(([key, label]) => (
+          <option value="All">{K.allRoles}</option>
+          {roleKeys.map((key) => (
             <option key={key} value={key}>
-              {label}
+              {roleLabels[key]}
             </option>
           ))}
         </select>
@@ -252,23 +259,23 @@ export function CustomersManager({
       {/* Summary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Total Customers</p>
+          <p className="text-xs text-text-secondary">{K.total}</p>
           <p className="text-lg font-bold text-navy">{customers.length}</p>
         </div>
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Verified</p>
+          <p className="text-xs text-text-secondary">{K.verification.Verified}</p>
           <p className="text-lg font-bold text-success">
             {customers.filter((c) => c.verificationStatus === "Verified").length}
           </p>
         </div>
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Pending</p>
+          <p className="text-xs text-text-secondary">{K.verification.Pending}</p>
           <p className="text-lg font-bold text-warning">
             {customers.filter((c) => c.verificationStatus === "Pending").length}
           </p>
         </div>
         <div className="rounded-[var(--radius-sm)] border border-border bg-surface px-4 py-3">
-          <p className="text-xs text-text-secondary">Suspended</p>
+          <p className="text-xs text-text-secondary">{K.suspendedCount}</p>
           <p className="text-lg font-bold text-error">
             {customers.filter((c) => !c.isActive).length}
           </p>
@@ -283,31 +290,31 @@ export function CustomersManager({
             <thead>
               <tr className="border-b border-border bg-surface-secondary/50">
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Customer
+                  {K.colCustomer}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Company
+                  {K.colCompany}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Location
+                  {K.colLocation}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Role
+                  {K.colRole}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Verification
+                  {K.colVerification}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Orders
+                  {K.colOrders}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Spent
+                  {K.colSpent}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Joined
+                  {K.colJoined}
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  Actions
+                  {C.actions}
                 </th>
               </tr>
             </thead>
@@ -338,13 +345,13 @@ export function CustomersManager({
                             </p>
                             {isSelf && (
                               <span className="inline-flex items-center rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand">
-                                You
+                                {C.you}
                               </span>
                             )}
                             {!customer.isActive && (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-error/10 px-1.5 py-0.5 text-[10px] font-medium text-error">
                                 <Ban className="h-2.5 w-2.5" />
-                                Suspended
+                                {K.suspended}
                               </span>
                             )}
                           </div>
@@ -396,9 +403,9 @@ export function CustomersManager({
                           }
                           className="h-8 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-xs font-medium focus:border-brand focus:outline-none cursor-pointer disabled:opacity-50"
                         >
-                          {Object.entries(roleLabels).map(([key, label]) => (
+                          {roleKeys.map((key) => (
                             <option key={key} value={key}>
-                              {label}
+                              {roleLabels[key]}
                             </option>
                           ))}
                         </select>
@@ -431,7 +438,7 @@ export function CustomersManager({
                         ) : (
                           <XCircle className="h-3 w-3" />
                         )}
-                        {customer.verificationStatus}
+                        {verificationLabel(customer.verificationStatus)}
                       </span>
                     </td>
 
@@ -445,7 +452,7 @@ export function CustomersManager({
                     {/* Total Spent */}
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-text-primary">
-                        ${customer.totalSpent.toLocaleString("en-US", {
+                        ${formatNumber(customer.totalSpent, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,
                         })}
@@ -455,10 +462,7 @@ export function CustomersManager({
                     {/* Joined Date */}
                     <td className="px-4 py-3">
                       <p className="text-xs text-text-secondary">
-                        {new Date(customer.createdAt).toLocaleDateString(
-                          "en-US",
-                          { month: "short", year: "numeric" }
-                        )}
+                        {formatDate(customer.createdAt, { month: "short", year: "numeric" })}
                       </p>
                     </td>
 
@@ -475,7 +479,7 @@ export function CustomersManager({
                               isPending &&
                               pendingAction === `${customer.id}-verify-verified`
                             }
-                            title="Verify customer"
+                            title={K.verify}
                             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-success hover:bg-success/10 transition-colors disabled:opacity-50"
                           >
                             <CheckCircle className="h-4 w-4" />
@@ -490,7 +494,7 @@ export function CustomersManager({
                               isPending &&
                               pendingAction === `${customer.id}-verify-rejected`
                             }
-                            title="Reject verification"
+                            title={K.rejectVerification}
                             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-warning hover:bg-warning/10 transition-colors disabled:opacity-50"
                           >
                             <XCircle className="h-4 w-4" />
@@ -506,7 +510,7 @@ export function CustomersManager({
                                 isPending &&
                                 pendingAction === `${customer.id}-suspend`
                               }
-                              title="Suspend user"
+                              title={K.suspend}
                               className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                             >
                               <Ban className="h-4 w-4" />
@@ -518,7 +522,7 @@ export function CustomersManager({
                                 isPending &&
                                 pendingAction === `${customer.id}-unsuspend`
                               }
-                              title="Unsuspend user"
+                              title={K.unsuspend}
                               className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-success hover:bg-success/10 transition-colors disabled:opacity-50"
                             >
                               <CheckCircle className="h-4 w-4" />
@@ -533,7 +537,7 @@ export function CustomersManager({
                               isPending &&
                               pendingAction === `${customer.id}-delete`
                             }
-                            title="Delete user"
+                            title={K.deleteUser}
                             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-error hover:bg-error/10 transition-colors disabled:opacity-50"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -551,7 +555,7 @@ export function CustomersManager({
         <Card className="p-12 text-center">
           <Users className="h-10 w-10 text-text-disabled mx-auto mb-3" />
           <p className="text-sm text-text-secondary">
-            No customers found. Try adjusting your search or filters.
+            {K.none}
           </p>
         </Card>
       )}
@@ -565,16 +569,15 @@ export function CustomersManager({
                 <AlertTriangle className="h-6 w-6 text-error" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-navy">Delete Customer</h3>
+                <h3 className="text-lg font-bold text-navy">{K.deleteTitle}</h3>
                 <p className="mt-1 text-sm text-text-secondary">
-                  Are you sure you want to permanently delete{" "}
+                  {K.deleteBefore}{" "}
                   <span className="font-semibold text-text-primary">
                     {deleteTarget.firstName} {deleteTarget.lastName}
                   </span>
-                  ? This will remove their profile, customer record, and all
-                  associated data. This action{" "}
+                  {K.deleteAfter}{" "}
                   <span className="font-semibold text-error">
-                    cannot be undone
+                    {K.cannotUndo}
                   </span>
                   .
                 </p>
@@ -604,14 +607,14 @@ export function CustomersManager({
                 disabled={isPending}
                 className="flex h-10 items-center rounded-[var(--radius-button)] border border-border px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors disabled:opacity-50"
               >
-                Cancel
+                {C.cancel}
               </button>
               <button
                 onClick={() => handleDelete(deleteTarget)}
                 disabled={isPending}
                 className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-error px-4 text-sm font-semibold text-white hover:bg-error/90 transition-colors disabled:opacity-50"
               >
-                {isPending ? "Deleting..." : "Delete Permanently"}
+                {isPending ? K.deleting : K.deleteForever}
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>

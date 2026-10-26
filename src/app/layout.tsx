@@ -1,7 +1,16 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { CurrencyProvider } from "@/lib/currency-context";
+import { CartProvider } from "@/lib/cart-context";
+import { NotificationsProvider } from "@/lib/notifications-context";
+import { NotificationToasts } from "@/components/notifications/notification-toasts";
+import { ChatWidget } from "@/components/chat/chat-widget";
+import { I18nProvider } from "@/i18n/client";
+import { getLocale, getPathname } from "@/i18n/server";
+import { SITE_URL, absoluteUrl, isIndexable, languageAlternates } from "@/i18n/seo";
+import { getDictionary } from "@/i18n/dictionary";
+import { intlLocale } from "@/i18n/config";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -10,34 +19,71 @@ const inter = Inter({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "AfrikWholesaler — B2B Sourcing & Wholesale Platform for Africa",
-  description:
-    "Source quality products from China with confidence. AfrikWholesaler handles sourcing, quality control, logistics, and delivery to businesses across Africa.",
-  keywords: [
-    "B2B wholesale",
-    "sourcing from China",
-    "Africa import",
-    "bulk products",
-    "AfrikWholesaler",
-  ],
-  openGraph: {
-    title: "AfrikWholesaler — B2B Sourcing & Wholesale Platform for Africa",
-    description:
-      "Source quality products from China with confidence. We handle sourcing, QC, logistics, and delivery to businesses across Africa.",
-    type: "website",
-  },
-};
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  display: "swap",
+});
 
-export default function RootLayout({
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const path = await getPathname();
+  const t = getDictionary(locale);
+  const indexable = isIndexable(path);
+  return {
+    metadataBase: new URL(SITE_URL),
+    // Each page exists in four languages: tell search engines about all of them.
+    alternates: indexable ? { canonical: absoluteUrl(path, locale), languages: languageAlternates(path) } : undefined,
+    robots: indexable ? { index: true, follow: true } : { index: false, follow: false },
+    title: t.layout.meta.title,
+    description: t.layout.meta.description,
+    keywords: [
+      "B2B",
+      "wholesale",
+      "grossiste",
+      "sourcing Chine",
+      "Afrique",
+      "Mobile Money",
+      "AfrikWholesaler",
+    ],
+    openGraph: {
+      title: t.layout.meta.title,
+      description: t.layout.meta.description,
+      type: "website",
+      siteName: "AfrikWholesaler",
+      locale: intlLocale[locale].replace("-", "_"),
+      url: absoluteUrl(path, locale),
+    },
+  };
+}
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
+  const dictionary = getDictionary(locale);
+
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    <html
+      lang={intlLocale[locale]}
+      className={`${inter.variable} ${cormorant.variable} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col bg-background text-text-primary">
-        <CurrencyProvider>{children}</CurrencyProvider>
+        <I18nProvider locale={locale} dictionary={dictionary}>
+          <CurrencyProvider>
+            <NotificationsProvider>
+              <CartProvider>
+                {children}
+                <ChatWidget />
+                <NotificationToasts />
+              </CartProvider>
+            </NotificationsProvider>
+          </CurrencyProvider>
+        </I18nProvider>
       </body>
     </html>
   );

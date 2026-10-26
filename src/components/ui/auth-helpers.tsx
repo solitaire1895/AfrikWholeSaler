@@ -53,7 +53,7 @@ export function Divider({ label }: { label: string }) {
 
 // --- SocialButton ---
 interface SocialButtonProps {
-  provider: "google" | "apple";
+  provider: "google";
   onClick?: () => void;
 }
 
@@ -68,39 +68,32 @@ function GoogleIcon({ className }: { className?: string }) {
   );
 }
 
-function AppleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
-    </svg>
-  );
-}
-
-export function SocialButton({ provider, onClick }: SocialButtonProps) {
-  const isGoogle = provider === "google";
+export function SocialButton({ onClick }: SocialButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       className="flex h-12 w-full items-center justify-center gap-3 rounded-[var(--radius-button)] border border-border bg-surface text-sm font-semibold text-text-primary hover:bg-surface-secondary hover:border-brand/20 transition-all"
     >
-      {isGoogle ? (
-        <GoogleIcon className="h-5 w-5" />
-      ) : (
-        <AppleIcon className="h-5 w-5" />
-      )}
-      {isGoogle ? "Google" : "Apple"}
+      <GoogleIcon className="h-5 w-5" />
+      Google
     </button>
   );
 }
 
 // --- PasswordStrength ---
-export function PasswordStrength({ password }: { password: string }) {
+export function PasswordStrength({
+  password,
+  labels = { chars: "8+ characters", upper: "Uppercase letter", number: "Number", special: "Special character" },
+}: {
+  password: string;
+  labels?: { chars: string; upper: string; number: string; special: string };
+}) {
   const checks = [
-    { label: "8+ characters", met: password.length >= 8 },
-    { label: "Uppercase letter", met: /[A-Z]/.test(password) },
-    { label: "Number", met: /\d/.test(password) },
-    { label: "Special character", met: /[^A-Za-z0-9]/.test(password) },
+    { label: labels.chars, met: password.length >= 8 },
+    { label: labels.upper, met: /[A-Z]/.test(password) },
+    { label: labels.number, met: /\d/.test(password) },
+    { label: labels.special, met: /[^A-Za-z0-9]/.test(password) },
   ];
   const metCount = checks.filter((c) => c.met).length;
   const strength = metCount === 0 ? 0 : Math.round((metCount / 4) * 100);

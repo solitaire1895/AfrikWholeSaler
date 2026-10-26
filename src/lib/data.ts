@@ -492,7 +492,7 @@ export const faqs: FAQItem[] = [
     id: "faq-4",
     question: "What payment methods do you accept?",
     answer:
-      "We support multiple payment methods including bank transfer, Stripe, Paystack, and Flutterwave depending on your country. For large B2B orders, we offer milestone-based payment plans (deposit on order, balance on shipment).",
+      "You can pay with Mobile Money — Orange Money, MTN MoMo, Moov Money and Wave — directly in FCFA, as well as by card or bank transfer. For large B2B orders, we offer milestone-based payment plans (deposit on order, balance on shipment).",
     category: "Payments",
   },
   {

@@ -1,10 +1,16 @@
+import Link from "next/link";
 import { PackageCheck, AlertTriangle, TrendingDown, Package } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getProducts } from "@/lib/queries";
 import { cn } from "@/lib/utils";
+import { getT } from "@/i18n/server";
+import { categoryName } from "@/i18n/names";
 
 export default async function AdminInventoryPage() {
   const products = await getProducts();
+  const t = await getT();
+  const I = t.adminCatalog.inventory;
+  const stock = t.catalog.stock as Record<string, string>;
 
   const inStock = products.filter((p) => p.stockStatus === "In Stock").length;
   const lowStock = products.filter((p) => p.stockStatus === "Low Stock").length;
@@ -12,18 +18,18 @@ export default async function AdminInventoryPage() {
   const preOrder = products.filter((p) => p.stockStatus === "Pre-Order").length;
 
   const stats = [
-    { label: "In Stock", value: inStock, icon: PackageCheck, color: "text-success", bg: "bg-success/10" },
-    { label: "Low Stock", value: lowStock, icon: AlertTriangle, color: "text-warning", bg: "bg-warning/10" },
-    { label: "Out of Stock", value: outOfStock, icon: TrendingDown, color: "text-error", bg: "bg-error/10" },
-    { label: "Pre-Order", value: preOrder, icon: Package, color: "text-info", bg: "bg-info/10" },
+    { label: stock["In Stock"], value: inStock, icon: PackageCheck, color: "text-success", bg: "bg-success/10" },
+    { label: stock["Low Stock"], value: lowStock, icon: AlertTriangle, color: "text-warning", bg: "bg-warning/10" },
+    { label: stock["Out of Stock"], value: outOfStock, icon: TrendingDown, color: "text-error", bg: "bg-error/10" },
+    { label: stock["Pre-Order"], value: preOrder, icon: Package, color: "text-info", bg: "bg-info/10" },
   ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-navy tracking-tight">Inventory</h1>
+        <h1 className="text-2xl font-bold text-navy tracking-tight">{I.title}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Monitor stock levels and manage inventory across products.
+          {I.lead}
         </p>
       </div>
 
@@ -44,11 +50,11 @@ export default async function AdminInventoryPage() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface-secondary/50">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Product</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Category</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Stock Status</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden md:table-cell">MOQ</th>
-                <th className="text-right px-4 py-3 text-xs font-semibold text-text-secondary uppercase">Action</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{I.colProduct}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{I.colCategory}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{I.colStatus}</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase hidden md:table-cell">{I.colMoq}</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold text-text-secondary uppercase">{I.colAction}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -59,7 +65,7 @@ export default async function AdminInventoryPage() {
                       <p className="text-sm font-medium text-text-primary truncate max-w-[200px]">{product.name}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-text-secondary">{product.category}</span>
+                      <span className="text-sm text-text-secondary">{categoryName(t, product.categorySlug, product.category)}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
@@ -68,19 +74,19 @@ export default async function AdminInventoryPage() {
                         product.stockStatus === "Out of Stock" ? "bg-error/10 text-error" :
                         "bg-info/10 text-info"
                       )}>
-                        {product.stockStatus}
+                        {stock[product.stockStatus] ?? product.stockStatus}
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       <span className="text-sm text-text-secondary">{product.moq}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <a
-                        href={`/admin/products`}
+                      <Link
+                        href="/admin/products"
                         className="inline-flex h-8 items-center rounded-[var(--radius-sm)] border border-border px-3 text-xs font-medium text-text-primary hover:bg-surface-secondary"
                       >
-                        Update
-                      </a>
+                        {I.update}
+                      </Link>
                     </td>
                   </tr>
                 ))
@@ -88,7 +94,7 @@ export default async function AdminInventoryPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center">
                     <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
-                    <p className="text-sm text-text-secondary">No products in inventory.</p>
+                    <p className="text-sm text-text-secondary">{I.none}</p>
                   </td>
                 </tr>
               )}
