@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import type { Product, Category } from "@/types";
 import { useI18n } from "@/i18n/client";
 import { categoryName } from "@/i18n/names";
+import { FilterDrawer, FilterOption, FilterSection } from "@/components/filters/filter-ui";
 
 interface SearchResultsProps {
   query: string;
@@ -156,8 +157,8 @@ export function SearchResults({
       {/* Toolbar */}
       <div className="flex items-center justify-between mb-6">
         <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 rounded-[var(--radius-button)] border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors"
+          onClick={() => setShowFilters(true)}
+          className="flex h-11 items-center gap-2 rounded-full border border-navy bg-navy px-5 text-sm font-semibold text-white transition-colors hover:bg-navy-light"
         >
           <SlidersHorizontal className="h-4 w-4" />
           {S.filters}
@@ -169,7 +170,7 @@ export function SearchResults({
             setSelectedSort(e.target.value);
             updateUrl("sort", e.target.value);
           }}
-          className="h-10 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none cursor-pointer"
+          className="h-11 cursor-pointer rounded-full border border-border bg-surface px-5 text-sm focus:border-brand focus:outline-none"
         >
           {sortOptions.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -178,90 +179,77 @@ export function SearchResults({
       </div>
 
       <div className="flex gap-6">
-        {/* Filter sidebar */}
-        {showFilters && (
-          <aside className="w-64 shrink-0 space-y-6">
-            {/* Category filter */}
-            <div>
-              <h3 className="text-sm font-semibold text-navy mb-2">{S.category}</h3>
-              <div className="space-y-1">
-                <button
-                  onClick={() => {
-                    setSelectedCategory("");
-                    updateUrl("category", "");
-                  }}
-                  className={cn(
-                    "block w-full text-left px-2 py-1 rounded text-sm transition-colors",
-                    !selectedCategory ? "bg-brand-light text-brand font-medium" : "text-text-secondary hover:bg-surface-secondary"
-                  )}
-                >
-                  {S.allCategories}
-                </button>
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => {
-                      setSelectedCategory(cat.slug);
-                      updateUrl("category", cat.slug);
-                    }}
-                    className={cn(
-                      "block w-full text-left px-2 py-1 rounded text-sm transition-colors",
-                      selectedCategory === cat.slug ? "bg-brand-light text-brand font-medium" : "text-text-secondary hover:bg-surface-secondary"
-                    )}
-                  >
-                    {categoryName(t, cat.slug, cat.name)}
-                    {data?.facets?.categories?.[cat.name] && (
-                      <span className="ml-1 text-xs text-text-disabled">({data.facets.categories[cat.name]})</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Price filter */}
-            <div>
-              <h3 className="text-sm font-semibold text-navy mb-2">{S.priceRange}</h3>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={minPrice}
-                  onChange={(e) => setMinPrice(e.target.value)}
-                  placeholder={S.min}
-                  className="w-full h-9 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-sm focus:border-brand focus:outline-none"
-                />
-                <input
-                  type="number"
-                  value={maxPrice}
-                  onChange={(e) => setMaxPrice(e.target.value)}
-                  placeholder={S.max}
-                  className="w-full h-9 rounded-[var(--radius-sm)] border border-border bg-surface px-2 text-sm focus:border-brand focus:outline-none"
-                />
-              </div>
+        {/* Filters: slide-over panel, so the results grid never moves */}
+        <FilterDrawer
+          open={showFilters}
+          onClose={() => setShowFilters(false)}
+          title={S.filters}
+          closeLabel={t.catalog.list.closeFilters}
+          footer={
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setSelectedCategory("");
+                  setMinPrice("");
+                  setMaxPrice("");
+                  setInStockOnly(false);
+                  router.push(`/search?${new URLSearchParams(initialQuery ? { q: initialQuery } : {}).toString()}`);
+                  setShowFilters(false);
+                }}
+                className="h-12 rounded-full border border-border px-5 text-sm font-medium text-navy transition-colors hover:bg-surface-secondary"
+              >
+                {t.catalog.list.clear}
+              </button>
               <button
                 onClick={applyFilters}
-                className="mt-2 w-full h-9 rounded-[var(--radius-sm)] bg-brand text-white text-xs font-semibold hover:bg-brand-hover transition-colors"
+                className="h-12 flex-1 rounded-full bg-brand text-sm font-semibold text-white shadow-[var(--shadow-button)] transition-colors hover:bg-brand-hover"
               >
                 {S.apply}
               </button>
             </div>
+          }
+        >
+          <FilterSection title={S.category}>
+            <FilterOption
+              label={S.allCategories}
+              active={!selectedCategory}
+              onClick={() => {
+                setSelectedCategory("");
+                updateUrl("category", "");
+              }}
+            />
+            {categories.map((cat) => (
+              <FilterOption
+                key={cat.id}
+                label={categoryName(t, cat.slug, cat.name)}
+                count={data?.facets?.categories?.[cat.name]}
+                active={selectedCategory === cat.slug}
+                onClick={() => {
+                  setSelectedCategory(cat.slug);
+                  updateUrl("category", cat.slug);
+                }}
+              />
+            ))}
+          </FilterSection>
 
-            {/* Stock filter */}
-            <div>
-              <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={inStockOnly}
-                  onChange={(e) => {
-                    setInStockOnly(e.target.checked);
-                    updateUrl("inStock", e.target.checked ? "true" : "");
-                  }}
-                  className="h-4 w-4 rounded border-border"
-                />
-                {S.inStockOnly}
-              </label>
+          <FilterSection title={S.priceRange}>
+            <div className="flex gap-2">
+              <input type="number" inputMode="decimal" value={minPrice} onChange={(e) => setMinPrice(e.target.value)} placeholder={S.min} className="h-11 w-full rounded-full border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20" />
+              <input type="number" inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder={S.max} className="h-11 w-full rounded-full border border-border bg-surface px-4 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20" />
             </div>
-          </aside>
-        )}
+          </FilterSection>
+
+          <FilterSection title={t.catalog.list.availability}>
+            <FilterOption
+              label={S.inStockOnly}
+              active={inStockOnly}
+              onClick={() => {
+                setInStockOnly(!inStockOnly);
+                updateUrl("inStock", !inStockOnly ? "true" : "");
+              }}
+            />
+          </FilterSection>
+        </FilterDrawer>
 
         {/* Results grid */}
         <div className="flex-1">

@@ -6,10 +6,10 @@ import { Search, SlidersHorizontal, X, Package } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { ProductCard } from "@/components/product/product-card";
-import { cn } from "@/lib/utils";
 import type { Product, Category, SubCategory, StockStatus } from "@/types";
 import { useI18n } from "@/i18n/client";
 import { categoryName, subCategoryName } from "@/i18n/names";
+import { FilterChip, FilterDrawer, FilterOption, FilterSection } from "@/components/filters/filter-ui";
 
 const stockStatuses: StockStatus[] = [
   "In Stock",
@@ -39,6 +39,13 @@ export function ProductsBrowser({
   const [selectedStock, setSelectedStock] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("featured");
   const [showFilters, setShowFilters] = useState(false);
+
+  const activeCount = [selectedCategory !== "all", selectedSubCategory !== "all", selectedStock !== "all"].filter(Boolean).length;
+  const clearFilters = () => {
+    setSelectedCategory("all");
+    setSelectedSubCategory("all");
+    setSelectedStock("all");
+  };
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
@@ -120,6 +127,61 @@ export function ProductsBrowser({
       ? L.allProducts
       : categoryName(t, activeCategory.slug, activeCategory.name);
 
+  // Same filter contents for the desktop sidebar and the mobile slide-over.
+  const filterPanel = (
+    <>
+      <FilterSection title={L.categories}>
+        <FilterOption
+          label={L.allCategories}
+          active={selectedCategory === "all"}
+          onClick={() => {
+            setSelectedCategory("all");
+            setSelectedSubCategory("all");
+          }}
+        />
+        {categories.map((cat) => (
+          <FilterOption
+            key={cat.id}
+            label={categoryName(t, cat.slug, cat.name)}
+            count={cat.productCount}
+            active={selectedCategory === cat.slug}
+            onClick={() => {
+              setSelectedCategory(cat.slug);
+              setSelectedSubCategory("all");
+            }}
+          />
+        ))}
+      </FilterSection>
+
+      {availableSubCategories.length > 0 && (
+        <FilterSection title={L.subCategories}>
+          <FilterOption label={L.allSubCategories} active={selectedSubCategory === "all"} onClick={() => setSelectedSubCategory("all")} />
+          {availableSubCategories.map((subCat) => (
+            <FilterOption
+              key={subCat.id}
+              label={subCategoryName(t, subCat.slug, subCat.name)}
+              count={subCat.productCount}
+              active={selectedSubCategory === subCat.slug}
+              onClick={() => setSelectedSubCategory(subCat.slug)}
+            />
+          ))}
+        </FilterSection>
+      )}
+
+      <FilterSection title={L.availability}>
+        <FilterOption label={L.all} active={selectedStock === "all"} onClick={() => setSelectedStock("all")} />
+        {stockStatuses.map((status) => (
+          <FilterOption
+            key={status}
+            label={t.catalog.stock[status]}
+            active={selectedStock === status}
+            onClick={() => setSelectedStock(status)}
+          />
+        ))}
+      </FilterSection>
+    </>
+  );
+
   return (
     <>
       <Navbar />
@@ -144,169 +206,122 @@ export function ProductsBrowser({
         </div>
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-          {/* Search & Sort Bar */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          {/* Search, sort and (below desktop) the filters button */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
+              <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
               <input
                 type="text"
                 placeholder={L.searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full h-11 rounded-[var(--radius-input)] border border-border bg-surface pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 transition-all"
+                className="h-12 w-full rounded-full border border-border bg-surface pl-11 pr-10 text-sm text-text-primary placeholder:text-text-disabled transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               />
               {search && (
                 <button
                   onClick={() => setSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-primary"
+                  aria-label={L.clear}
+                  className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-text-disabled hover:bg-surface-secondary hover:text-text-primary"
                 >
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="h-11 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm text-text-primary focus:border-brand focus:outline-none cursor-pointer"
-            >
-              <option value="featured">{L.sortFeatured}</option>
-              <option value="price-low">{L.sortPriceLow}</option>
-              <option value="price-high">{L.sortPriceHigh}</option>
-              <option value="rating">{L.sortRating}</option>
-            </select>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex h-11 items-center gap-2 rounded-[var(--radius-input)] border border-border bg-surface px-4 text-sm font-medium text-text-primary hover:bg-surface-secondary transition-colors lg:hidden"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              {L.filters}
-            </button>
+            <div className="flex gap-3">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="h-12 flex-1 cursor-pointer rounded-full border border-border bg-surface px-5 text-sm text-text-primary focus:border-brand focus:outline-none sm:flex-none"
+              >
+                <option value="featured">{L.sortFeatured}</option>
+                <option value="price-low">{L.sortPriceLow}</option>
+                <option value="price-high">{L.sortPriceHigh}</option>
+                <option value="rating">{L.sortRating}</option>
+              </select>
+              <button
+                onClick={() => setShowFilters(true)}
+                className="relative flex h-12 items-center gap-2 rounded-full border border-navy bg-navy px-5 text-sm font-semibold text-white transition-colors hover:bg-navy-light lg:hidden"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                {L.filters}
+                {activeCount > 0 && (
+                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-[11px] font-bold">
+                    {activeCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
-          <div className="flex gap-8">
-            {/* Sidebar Filters */}
-            <aside
-              className={cn(
-                "w-64 shrink-0 space-y-6",
-                showFilters ? "block" : "hidden lg:block"
+          {/* Active filters */}
+          {activeCount > 0 && (
+            <div className="mb-6 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-secondary">{L.activeFilters}</span>
+              {selectedCategory !== "all" && (
+                <FilterChip
+                  label={activeCategoryName}
+                  removeLabel={L.clear}
+                  onRemove={() => {
+                    setSelectedCategory("all");
+                    setSelectedSubCategory("all");
+                  }}
+                />
               )}
-            >
-              {/* Categories */}
-              <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-                <h3 className="text-sm font-semibold text-navy mb-3">
-                  {L.categories}
-                </h3>
-                <div className="space-y-1">
-                    <button
-                      onClick={() => {
-                        setSelectedCategory("all");
-                        setSelectedSubCategory("all");
-                      }}
-                      className={cn(
-                        "block w-full text-left px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors",
-                        selectedCategory === "all"
-                          ? "bg-brand-light text-brand font-medium"
-                          : "text-text-secondary hover:bg-surface-secondary"
-                      )}
-                    >
-                      {L.allCategories}
-                    </button>
-                    {categories.map((cat) => (
-                      <button
-                        key={cat.id}
-                        onClick={() => {
-                          setSelectedCategory(cat.slug);
-                          setSelectedSubCategory("all");
-                        }}
-                        className={cn(
-                          "block w-full text-left px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors",
-                          selectedCategory === cat.slug
-                            ? "bg-brand-light text-brand font-medium"
-                            : "text-text-secondary hover:bg-surface-secondary"
-                        )}
-                      >
-                        {categoryName(t, cat.slug, cat.name)}
-                        <span className="text-text-disabled ml-1">
-                          ({cat.productCount})
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              {selectedSubCategory !== "all" && (
+                <FilterChip
+                  label={(() => {
+                    const sc = availableSubCategories.find((x) => x.slug === selectedSubCategory);
+                    return sc ? subCategoryName(t, sc.slug, sc.name) : selectedSubCategory;
+                  })()}
+                  removeLabel={L.clear}
+                  onRemove={() => setSelectedSubCategory("all")}
+                />
+              )}
+              {selectedStock !== "all" && (
+                <FilterChip
+                  label={t.catalog.stock[selectedStock as StockStatus] ?? selectedStock}
+                  removeLabel={L.clear}
+                  onRemove={() => setSelectedStock("all")}
+                />
+              )}
+              <button onClick={clearFilters} className="ml-1 text-xs font-medium text-brand underline-offset-2 hover:underline">
+                {L.clearFilters}
+              </button>
+            </div>
+          )}
 
-                {/* Sub-Categories (only shown when a category is selected) */}
-                {availableSubCategories.length > 0 && (
-                  <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-                    <h3 className="text-sm font-semibold text-navy mb-3">
-                      {L.subCategories}
-                    </h3>
-                    <div className="space-y-1">
-                      <button
-                        onClick={() => setSelectedSubCategory("all")}
-                        className={cn(
-                          "block w-full text-left px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors",
-                          selectedSubCategory === "all"
-                            ? "bg-brand-light text-brand font-medium"
-                            : "text-text-secondary hover:bg-surface-secondary"
-                        )}
-                      >
-                        {L.allSubCategories}
-                      </button>
-                      {availableSubCategories.map((subCat) => (
-                        <button
-                          key={subCat.id}
-                          onClick={() => setSelectedSubCategory(subCat.slug)}
-                          className={cn(
-                            "block w-full text-left px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors",
-                            selectedSubCategory === subCat.slug
-                              ? "bg-brand-light text-brand font-medium"
-                              : "text-text-secondary hover:bg-surface-secondary"
-                          )}
-                        >
-                          {subCategoryName(t, subCat.slug, subCat.name)}
-                          <span className="text-text-disabled ml-1">
-                            ({subCat.productCount})
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              {/* Stock Status */}
-              <div className="rounded-[var(--radius-lg)] border border-border bg-surface p-5">
-                <h3 className="text-sm font-semibold text-navy mb-3">
-                  {L.availability}
-                </h3>
-                <div className="space-y-1">
-                  <button
-                    onClick={() => setSelectedStock("all")}
-                    className={cn(
-                      "block w-full text-left px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors",
-                      selectedStock === "all"
-                        ? "bg-brand-light text-brand font-medium"
-                        : "text-text-secondary hover:bg-surface-secondary"
-                    )}
-                  >
-                    {L.all}
-                  </button>
-                  {stockStatuses.map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => setSelectedStock(status)}
-                      className={cn(
-                        "block w-full text-left px-3 py-2 rounded-[var(--radius-sm)] text-sm transition-colors",
-                        selectedStock === status
-                          ? "bg-brand-light text-brand font-medium"
-                          : "text-text-secondary hover:bg-surface-secondary"
-                      )}
-                    >
-                      {t.catalog.stock[status]}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          <div className="flex items-start gap-8">
+            {/* Desktop: sidebar that stays in view while scrolling */}
+            <aside className="sticky top-24 hidden max-h-[calc(100vh-7rem)] w-64 shrink-0 overflow-y-auto rounded-[20px] border border-border bg-surface px-5 py-1 lg:block">
+              {filterPanel}
             </aside>
+
+            {/* Mobile & tablet: slide-over panel — the grid never moves */}
+            <FilterDrawer
+              open={showFilters}
+              onClose={() => setShowFilters(false)}
+              title={L.filters}
+              closeLabel={L.closeFilters}
+              footer={
+                <div className="flex gap-3">
+                  <button
+                    onClick={clearFilters}
+                    disabled={activeCount === 0}
+                    className="h-12 rounded-full border border-border px-5 text-sm font-medium text-navy transition-colors hover:bg-surface-secondary disabled:opacity-40"
+                  >
+                    {L.clear}
+                  </button>
+                  <button
+                    onClick={() => setShowFilters(false)}
+                    className="h-12 flex-1 rounded-full bg-brand text-sm font-semibold text-white shadow-[var(--shadow-button)] transition-colors hover:bg-brand-hover"
+                  >
+                    {filteredProducts.length === 1 ? L.showResultsOne : format(L.showResults, { n: filteredProducts.length })}
+                  </button>
+                </div>
+              }
+            >
+              {filterPanel}
+            </FilterDrawer>
 
             {/* Product Grid */}
             <div className="flex-1">
