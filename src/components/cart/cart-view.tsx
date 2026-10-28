@@ -44,7 +44,8 @@ export function CartView() {
     );
   }
 
-  const checkoutHref = loggedIn ? "/checkout" : `/login?redirect=${encodeURIComponent("/checkout")}`;
+  // Always /checkout: the page sends logged-out visitors to login and back.
+  const checkoutHref = "/checkout";
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">

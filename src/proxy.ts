@@ -118,8 +118,15 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  // Redirect authenticated users away from auth pages
-  if (isAuthRoute && user) return redirectTo("/products", false);
+  // Redirect authenticated users away from auth pages — to where they were
+  // heading (?redirect=/checkout…) when that's a page on this site, else products.
+  if (isAuthRoute && user) {
+    const wanted = request.nextUrl.searchParams.get("redirect") ?? "";
+    if (wanted.startsWith("/") && !wanted.startsWith("//") && !wanted.startsWith("/\\")) {
+      return NextResponse.redirect(new URL(wanted, request.url));
+    }
+    return redirectTo("/products", false);
+  }
 
   // Protect dashboard and admin routes — require authentication
   if ((isDashboardRoute || isAdminRoute) && !user) return redirectTo("/login", true);
