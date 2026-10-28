@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { splitLocalePath } from "@/i18n/routing";
 import {
   Menu,
   X,
+  Search,
   Package,
   ChevronDown,
   FileText,
@@ -31,6 +34,16 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [megaMenuOpen, setMegaMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const currentPath = splitLocalePath(usePathname() || "/").path;
+  const isActive = (href: string) => currentPath === href || currentPath.startsWith(`${href}/`);
+  // Editorial nav link: small uppercase spaced type, red underline on hover / when active.
+  const navLink = (active: boolean) =>
+    cn(
+      "relative whitespace-nowrap px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] transition-colors",
+      "after:absolute after:inset-x-3 after:-bottom-0.5 after:h-px after:origin-left after:bg-brand after:transition-transform after:duration-300",
+      active ? "text-navy after:scale-x-100" : "text-text-secondary hover:text-navy after:scale-x-0 hover:after:scale-x-100"
+    );
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -107,39 +120,32 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Center Search (desktop) */}
-        <div className="hidden md:flex flex-1 max-w-md mx-4">
-          <SearchBar className="w-full" />
-        </div>
-
-        {/* Desktop Nav Links */}
-        <div className="hidden lg:flex items-center gap-1">
+        {/* Desktop links — centred, one line each */}
+        <div className="hidden flex-1 items-center justify-center gap-1 lg:flex">
           {/* Categories Mega Menu */}
           <div
             className="relative"
             onMouseEnter={() => setMegaMenuOpen(true)}
             onMouseLeave={() => setMegaMenuOpen(false)}
           >
-            <button className="flex items-center gap-1 px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors">
+            <button className={cn(navLink(megaMenuOpen), "flex items-center gap-1")} aria-expanded={megaMenuOpen}>
               {t.layout.nav.categories}
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", megaMenuOpen && "rotate-180")} />
             </button>
             {megaMenuOpen && (
-              <div className="absolute top-full left-0 pt-2 w-[480px]">
-                <div className="grid grid-cols-2 gap-1 p-4 bg-surface rounded-[var(--radius-lg)] shadow-[var(--shadow-dropdown)] border border-border">
+              <div className="absolute left-1/2 top-full w-[520px] -translate-x-1/2 pt-3">
+                <div className="grid animate-[scale-in_0.15s_ease-out] grid-cols-2 gap-1 rounded-[20px] border border-border bg-surface p-3 shadow-[var(--shadow-dropdown)]">
                   {categories.map((cat) => (
                     <Link
                       key={cat.id}
                       href={`/products?category=${cat.slug}`}
-                      className="flex items-center gap-3 p-3 rounded-[var(--radius-sm)] hover:bg-surface-secondary transition-colors"
+                      className="flex items-center gap-3 rounded-[14px] p-3 transition-colors hover:bg-cream"
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] bg-brand-light text-brand">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-light text-brand">
                         <Package className="h-4 w-4" />
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-text-primary">
-                          {categoryName(t, cat.slug, cat.name)}
-                        </p>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-navy">{categoryName(t, cat.slug, cat.name)}</p>
                         <p className="text-xs text-text-secondary">
                           {format(t.layout.nav.productsCount, { n: cat.productCount })}
                         </p>
@@ -151,42 +157,34 @@ export function Navbar() {
             )}
           </div>
 
-          <Link
-            href="/products"
-            className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
-          >
+          <Link href="/products" className={navLink(isActive("/products"))}>
             {t.layout.nav.products}
           </Link>
-          <Link
-            href="/quote"
-            className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
-          >
-            {t.layout.nav.requestQuote}
-          </Link>
-          <Link
-            href="/how-it-works"
-            className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
-          >
-            {t.layout.nav.howItWorks}
-          </Link>
-          <Link
-            href="/track"
-            className="px-3 py-2 text-sm font-medium text-text-primary hover:text-brand transition-colors"
-          >
+          <Link href="/track" className={cn(navLink(isActive("/track")), "hidden 2xl:block")}>
             {t.tracking.trackOrder}
           </Link>
         </div>
 
-        {/* Cart (all screen sizes) */}
-        <div className="ml-auto flex items-center md:ml-0">
+        {/* Utilities: search, currency, language, notifications, cart */}
+        <div className="ml-auto flex items-center gap-0.5 lg:ml-0">
+          <button
+            onClick={() => setSearchOpen((o) => !o)}
+            aria-label={searchOpen ? t.layout.nav.closeSearch : t.layout.nav.openSearch}
+            aria-expanded={searchOpen}
+            className="hidden h-10 w-10 items-center justify-center rounded-full text-text-primary transition-colors hover:bg-surface-secondary md:flex"
+          >
+            {searchOpen ? <X className="h-[18px] w-[18px]" /> : <Search className="h-[18px] w-[18px]" />}
+          </button>
           <CurrencySwitcher className="hidden sm:block" />
           <LanguageSwitcher />
           <NotificationBell />
           <CartButton />
         </div>
 
+        <span aria-hidden className="mx-1 hidden h-6 w-px bg-border md:block" />
+
         {/* CTAs */}
-        <div className="hidden md:flex items-center gap-2 shrink-0">
+        <div className="hidden shrink-0 items-center gap-2 whitespace-nowrap md:flex">
           {user ? (
             <div className="relative">
               <button
@@ -257,6 +255,15 @@ export function Navbar() {
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </nav>
+
+      {/* Desktop search panel, full width under the bar */}
+      {searchOpen && (
+        <div className="hidden border-t border-border/60 bg-surface/95 backdrop-blur md:block">
+          <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
+            <SearchBar className="w-full" autoFocus onNavigate={() => setSearchOpen(false)} />
+          </div>
+        </div>
+      )}
 
       {/* Mobile Menu */}
       {mobileOpen && (
