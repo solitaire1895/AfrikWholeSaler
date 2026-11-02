@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import {
   Package,
   Plus,
@@ -47,6 +48,8 @@ export function ProductsManager({
   const { t, format } = useI18n();
   const P = t.adminCatalog.products;
   const C = t.admin.common;
+  const router = useRouter();
+  const [confirmingDelete, setConfirmingDelete] = useState<Product | null>(null);
   const stock = t.catalog.stock as Record<string, string>;
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState("");
@@ -142,7 +145,7 @@ export function ProductsManager({
   }
 
   function handleDelete(productId: string) {
-    if (!confirm(P.confirmDelete)) return;
+    setConfirmingDelete(null);
     startTransition(async () => {
       const result = await deleteProduct(productId);
       if (result.success) {
@@ -367,9 +370,9 @@ export function ProductsManager({
       } else {
         const result = await createProduct(input);
         if (result.success) {
-          // The server action returns the created product; reload to get fresh data
-          setShowForm(false);
-          window.location.reload();
+          // Fetch the fresh list from the server without reloading the page.
+          closeForm();
+          router.refresh();
         } else {
           showFormError(format(P.saveFailed, { error: result.error || C.failed }));
         }
@@ -508,7 +511,7 @@ export function ProductsManager({
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(product.id)}
+                          onClick={() => setConfirmingDelete(product)}
                           disabled={isPending}
                           aria-label={C.delete}
                           className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-error disabled:opacity-50"
@@ -531,6 +534,42 @@ export function ProductsManager({
           </table>
         </div>
       </Card>
+
+      {/* Delete confirmation */}
+      {confirmingDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
+          onClick={() => setConfirmingDelete(null)}
+        >
+          <Card
+            role="alertdialog"
+            aria-modal="true"
+            className="w-full max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-error/10 text-error">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <h2 className="text-lg font-bold text-navy">{C.delete}</h2>
+            <p className="mt-1 text-sm font-medium text-text-primary">{confirmingDelete.name}</p>
+            <p className="mt-2 text-sm text-text-secondary">{P.confirmDelete}</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmingDelete(null)}
+                className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-secondary"
+              >
+                {C.cancel}
+              </button>
+              <button
+                onClick={() => handleDelete(confirmingDelete.id)}
+                className="rounded-[var(--radius-sm)] bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                {C.delete}
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Product Form Modal */}
       {showForm && (
