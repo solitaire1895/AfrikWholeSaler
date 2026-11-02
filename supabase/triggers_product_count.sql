@@ -1,3 +1,6 @@
+-- DEPRECATED: this version breaks product creation (UPDATE without WHERE).
+-- Use supabase/fix_product_count_trigger.sql instead.
+
 -- ============================================================================
 -- AfrikWholesaler — Product Count Triggers
 -- Auto-updates categories.product_count and sub_categories.product_count
