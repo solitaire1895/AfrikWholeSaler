@@ -69,6 +69,7 @@ export function ProductsManager({
   const [isUploading, setIsUploading] = useState(false);
   const [manualUrl, setManualUrl] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formErrorRef = useRef<HTMLDivElement>(null);
 
   // Video management state
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -287,8 +288,14 @@ export function ProductsManager({
     });
   }
 
+  function showFormError(message: string) {
+    setError(message);
+    requestAnimationFrame(() => formErrorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  }
+
   function handleSubmit(formData: FormData) {
     startTransition(async () => {
+     try {
       const categoryName = formData.get("category") as string;
       const categoryObj = categories.find((c) => c.name === categoryName);
       const subCategorySlug = formData.get("subCategorySlug") as string;
@@ -355,7 +362,7 @@ export function ProductsManager({
           setShowForm(false);
           setEditingProduct(null);
         } else {
-          setError(result.error || C.failed);
+          showFormError(format(P.saveFailed, { error: result.error || C.failed }));
         }
       } else {
         const result = await createProduct(input);
@@ -364,9 +371,15 @@ export function ProductsManager({
           setShowForm(false);
           window.location.reload();
         } else {
-          setError(result.error || C.failed);
+          showFormError(format(P.saveFailed, { error: result.error || C.failed }));
         }
       }
+     } catch (err) {
+      // The request itself failed (network, or the page is older than the
+      // last deploy: "Failed to find Server Action"). Entries stay in the form.
+      const message = err instanceof Error ? err.message : String(err);
+      showFormError(/server action|failed to fetch|unexpected response/i.test(message) ? P.reloadNeeded : format(P.saveFailed, { error: message }));
+     }
     });
   }
 
@@ -536,7 +549,25 @@ export function ProductsManager({
               </button>
             </div>
 
-            <form action={handleSubmit} className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSubmit(new FormData(e.currentTarget));
+              }}
+              className="space-y-4"
+            >
+              {error && (
+                <div
+                  ref={formErrorRef}
+                  role="alert"
+                  className="flex items-start gap-2 rounded-[14px] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error"
+                >
+                  <span className="flex-1">{error}</span>
+                  <button type="button" onClick={() => setError(null)} aria-label={C.dismiss} className="shrink-0 text-error/70 hover:text-error">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">{P.name}</label>

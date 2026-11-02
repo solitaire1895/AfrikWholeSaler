@@ -69,6 +69,8 @@ export const adminCatalog = defineMessages({
       tiersHint: "Define bulk pricing tiers. Leave Max qty empty for no upper limit (∞). The first tier's min qty follows the MOQ.",
       featured: "Featured product",
       update: "Update product",
+      reloadNeeded: "The site was just updated, so this page is out of date. Your entries are kept: copy them if needed, reload the page (F5) and save again.",
+      saveFailed: "The product couldn't be saved: {error}. Your entries are kept — fix the issue and save again.",
       create: "Create product",
     },
     inventory: {
@@ -195,6 +197,8 @@ export const adminCatalog = defineMessages({
       tiersHint: "Définissez les prix dégressifs. Laissez Qté max vide pour aucune limite (∞). La qté min du premier palier suit le MOQ.",
       featured: "Produit mis en avant",
       update: "Mettre à jour le produit",
+      reloadNeeded: "Le site vient d'être mis à jour, cette page n'est plus à jour. Vos saisies sont conservées : copiez-les si besoin, rechargez la page (F5) et enregistrez à nouveau.",
+      saveFailed: "Le produit n'a pas pu être enregistré : {error}. Vos saisies sont conservées — corrigez le problème et enregistrez à nouveau.",
       create: "Créer le produit",
     },
     inventory: {
@@ -321,6 +325,8 @@ export const adminCatalog = defineMessages({
       tiersHint: "Defina precios por volumen. Deje Cant. máx. vacía para no tener límite (∞). La cant. mín. del primer nivel sigue al MOQ.",
       featured: "Producto destacado",
       update: "Actualizar producto",
+      reloadNeeded: "El sitio acaba de actualizarse y esta página está desactualizada. Sus datos se conservan: cópielos si hace falta, recargue la página (F5) y guarde de nuevo.",
+      saveFailed: "No se pudo guardar el producto: {error}. Sus datos se conservan: corrija el problema y guarde de nuevo.",
       create: "Crear producto",
     },
     inventory: {
@@ -447,6 +453,8 @@ export const adminCatalog = defineMessages({
       tiersHint: "设置批量阶梯价格。最大数量留空表示无上限（∞）。第一档的最小数量与起订量同步。",
       featured: "推荐产品",
       update: "更新产品",
+      reloadNeeded: "网站刚刚更新，此页面已过期。您填写的内容已保留：如有需要请先复制，然后刷新页面（F5）并重新保存。",
+      saveFailed: "产品未能保存：{error}。您填写的内容已保留——请修正后重新保存。",
       create: "创建产品",
     },
     inventory: {
