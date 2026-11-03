@@ -86,7 +86,7 @@ DECLARE
   v_max INT;
   v_id UUID;
 BEGIN
-  IF p_order IS NULL THEN RETURN NULL; END IF;
+  IF p_order IS NULL OR p_stage IS NULL THEN RETURN NULL; END IF;   -- e.g. a "pending" status has no journey step
 
   IF v_rank IS NOT NULL THEN
     SELECT max(tracking_stage_rank(stage)) INTO v_max FROM order_tracking_events WHERE order_id = p_order;
