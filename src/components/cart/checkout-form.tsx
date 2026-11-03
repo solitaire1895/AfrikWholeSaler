@@ -8,10 +8,11 @@ import { Loader2, Lock, ArrowLeft, Info, Smartphone, Coins } from "lucide-react"
 import { useCart } from "@/lib/cart-context";
 import { useCurrency } from "@/lib/currency-context";
 import { placeOrder } from "@/app/actions/cart";
+import { payOrder } from "@/app/actions/payments";
 import { unitPriceFor } from "@/lib/pricing";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
-import { DEPOSIT_THRESHOLD_USD } from "@/lib/deposit";
+import { DEPOSIT_THRESHOLD_USD, depositAmount } from "@/lib/deposit";
 
 const COUNTRIES = [
   "Cameroon", "Senegal", "Côte d'Ivoire", "Benin", "Togo", "Burkina Faso", "Mali", "Niger",
@@ -55,14 +56,26 @@ export function CheckoutForm({
       return;
     }
     await refresh();
-    router.push(
-      `/dashboard/orders?placed=${encodeURIComponent(res.data!.orderNumber)}${res.data!.paid ? "&wallet=1" : ""}`
-    );
+    const ordersUrl = `/dashboard/orders?placed=${encodeURIComponent(res.data!.orderNumber)}${res.data!.paid ? "&wallet=1" : ""}`;
+    // Priced orders are paid right away (the 30% deposit for big ones) before
+    // they're processed. Price-on-request orders wait for the seller's price.
+    if (res.data!.paid || hasPriceOnRequest) {
+      router.push(ordersUrl);
+      return;
+    }
+    try {
+      await payOrder(res.data!.orderId, needsDeposit ? "deposit" : "full"); // redirects to SasPay
+    } catch {
+      // Payment page unavailable: the order is saved and can be paid from the orders list.
+      router.push(ordersUrl);
+    }
   }
 
   // The wallet can only pay for priced orders (price-on-request totals aren't known yet).
   const walletApplied = useWallet && !hasPriceOnRequest ? Math.min(walletBalance, subtotal) : 0;
   const due = Math.max(0, subtotal - walletApplied);
+  const needsDeposit = !hasPriceOnRequest && subtotal >= DEPOSIT_THRESHOLD_USD && due > 0.005;
+  const payNow = needsDeposit ? depositAmount({ totalAmount: subtotal, walletApplied }) : due;
 
   if (ready && lines.length === 0 && !submitting) {
     return (
@@ -227,10 +240,10 @@ export function CheckoutForm({
               {K.onRequestNote}
             </p>
           )}
-          {!hasPriceOnRequest && subtotal >= DEPOSIT_THRESHOLD_USD && (
+          {needsDeposit && (
             <p className="mt-4 flex gap-2 rounded-[14px] bg-brand-light p-3 text-xs text-navy">
               <Info className="h-4 w-4 shrink-0 text-brand" />
-              {t.account.orders.depositHint}
+              {K.depositRequired}
             </p>
           )}
 
@@ -248,9 +261,11 @@ export function CheckoutForm({
             {submitting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Lock className="h-4 w-4" />}
             {submitting
               ? K.placing
-              : walletApplied > 0 && due <= 0.005
-                ? K.placeWithBalance
-                : K.place}
+              : hasPriceOnRequest
+                ? K.place
+                : walletApplied > 0 && due <= 0.005
+                  ? K.placeWithBalance
+                  : format(needsDeposit ? K.payDepositAndPlace : K.payAndPlace, { amount: formatPrice(payNow) })}
           </button>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-text-secondary">
             <Smartphone className="h-3.5 w-3.5" />

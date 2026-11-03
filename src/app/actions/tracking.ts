@@ -77,6 +77,10 @@ export async function trackOrderPublic(orderNumber: string, email: string): Prom
     emails = [...emails, profile?.email?.toLowerCase()];
   }
   if (!emails.includes(mail)) return notFound;
+  // Tracking opens once the order (or its deposit) is paid.
+  if (!["paid", "partial"].includes(tracking.paymentStatus)) {
+    return { success: false, error: await te("Tracking is available once the order is paid.") };
+  }
 
   const { customerId: _omit, ...rest } = tracking;
   void _omit;

@@ -272,8 +272,9 @@ export async function placeOrder(
   await supabase.from("profiles").update({ locale: shopLocale }).eq("id", user.id).then(() => undefined, () => undefined);
 
   // Confirmation email, sent after the response so checkout isn't slowed down.
+  // Orders that go straight to payment are confirmed by the payment email instead.
   const placedId = order.id;
-  after(() => sendOrderPlacedEmail(placedId, { paidWithWallet: paid }));
+  if (paid || awaitingPrice) after(() => sendOrderPlacedEmail(placedId, { paidWithWallet: paid }));
 
   revalidatePath("/cart");
   revalidatePath("/dashboard/orders");
@@ -323,6 +324,44 @@ async function recordAffiliateCommissions(
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (rows.length) await admin.from("affiliate_commissions").insert(rows);
+}
+
+/** Statuses a customer can still cancel from (sourcing hasn't started). */
+const CANCELLABLE = ["pending", "confirmed"];
+
+/**
+ * Customer: cancels one of their orders before sourcing starts. Paid amounts
+ * are refunded by staff; wallet spend and affiliate commissions are reversed
+ * by the database (supabase/affiliates.sql).
+ */
+export async function cancelOrder(orderId: string): Promise<Result<{ wasPaid: boolean }>> {
+  const { supabase, user } = await requireUser();
+  if (!user) return { success: false, error: await te("Unauthorized") };
+  if (!(await rateLimit(`cancel:${user.id}`, 20, 600))) return { success: false, error: await te("Too many requests. Please wait a moment and try again.") };
+
+  // RLS: customers only read their own orders.
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, status, payment_status, amount_paid")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order) return { success: false, error: await te("Order not found.") };
+  if (!CANCELLABLE.includes(order.status)) {
+    return { success: false, error: await te("This order can no longer be cancelled: it's already being shipped.") };
+  }
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("orders")
+    .update({ status: "cancelled", updated_at: new Date().toISOString() })
+    .eq("id", order.id)
+    .in("status", CANCELLABLE);
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/dashboard/orders");
+  revalidatePath("/admin/orders");
+  const wasPaid = order.payment_status === "paid" || order.payment_status === "partial" || Number(order.amount_paid ?? 0) > 0;
+  return { success: true, data: { wasPaid } };
 }
 
 /** Staff: set the final price of a "price on request" order so the customer can pay. */

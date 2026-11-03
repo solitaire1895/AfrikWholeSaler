@@ -52,7 +52,7 @@ export async function payOrder(orderId: string, mode: "full" | "deposit" = "full
     .maybeSingle();
 
   if (!order) throw new Error("Order not found");
-  if (order.payment_status === "paid") redirect("/dashboard/orders");
+  if (order.payment_status === "paid" || order.status === "cancelled") redirect("/dashboard/orders");
   // "Price on request" orders can only be paid once staff have set the price.
   if (order.awaiting_price || Number(order.total_amount) <= 0) {
     throw new Error("This order is waiting for the seller to confirm its price.");

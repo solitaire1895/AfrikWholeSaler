@@ -72,6 +72,9 @@ export const shop = defineMessages({
       placing: "Placing your order…",
       placeWithBalance: "Place order — paid with balance",
       place: "Place order",
+      payAndPlace: "Pay {amount} and place order",
+      payDepositAndPlace: "Pay the 30% deposit ({amount})",
+      depositRequired: "Orders of $1,000 or more are confirmed with a 30% deposit; the balance is due before shipping.",
       nextStep: "You'll pay with Mobile Money or card on the next step.",
     },
     countries: {
@@ -151,6 +154,9 @@ export const shop = defineMessages({
       placing: "Envoi de votre commande…",
       placeWithBalance: "Commander — payé avec mon solde",
       place: "Valider la commande",
+      payAndPlace: "Payer {amount} et valider",
+      payDepositAndPlace: "Payer l'acompte de 30 % ({amount})",
+      depositRequired: "Les commandes de 1 000 $ ou plus sont confirmées par un acompte de 30 % ; le solde est dû avant l'expédition.",
       nextStep: "Vous paierez par Mobile Money ou carte à l'étape suivante.",
     },
     countries: {
@@ -230,6 +236,9 @@ export const shop = defineMessages({
       placing: "Enviando tu pedido…",
       placeWithBalance: "Pedir — pagado con saldo",
       place: "Confirmar pedido",
+      payAndPlace: "Pagar {amount} y confirmar",
+      payDepositAndPlace: "Pagar el anticipo del 30 % ({amount})",
+      depositRequired: "Los pedidos de 1000 $ o más se confirman con un anticipo del 30 %; el saldo se paga antes del envío.",
       nextStep: "Pagarás con Mobile Money o tarjeta en el siguiente paso.",
     },
     countries: {
@@ -309,6 +318,9 @@ export const shop = defineMessages({
       placing: "正在提交订单…",
       placeWithBalance: "下单——使用余额支付",
       place: "提交订单",
+      payAndPlace: "支付 {amount} 并提交订单",
+      payDepositAndPlace: "支付 30% 定金（{amount}）",
+      depositRequired: "1000 美元及以上的订单需先付 30% 定金确认，尾款在发货前付清。",
       nextStep: "下一步可使用移动支付或银行卡付款。",
     },
     countries: {

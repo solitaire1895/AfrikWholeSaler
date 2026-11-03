@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -16,9 +17,11 @@ import {
   Clock,
   CheckCircle2,
   Loader2,
+  XCircle,
 } from "lucide-react";
 import { useFormStatus } from "react-dom";
 import { payOrder } from "@/app/actions/payments";
+import { cancelOrder } from "@/app/actions/cart";
 import { Card } from "@/components/ui/card";
 import { ButtonLink } from "@/components/ui/button";
 import { formatPrice, cn } from "@/lib/utils";
@@ -36,6 +39,11 @@ const statusColors: Record<OrderStatus, string> = {
   Delivered: "bg-success/10 text-success border-success/20",
   Cancelled: "bg-error/10 text-error border-error/20",
 };
+
+// Before sourcing starts; keep in sync with CANCELLABLE in src/app/actions/cart.ts.
+const cancellable: OrderStatus[] = ["Pending", "Confirmed"];
+/** Tracking opens once something has been paid (the full amount or the deposit). */
+const hasPaid = (o: Order) => o.paymentStatus === "paid" || o.paymentStatus === "partial" || (o.amountPaid ?? 0) > 0;
 
 const statusFilters: (OrderStatus | "All")[] = [
   "All",
@@ -85,6 +93,24 @@ export function OrdersList({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "All">("All");
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const router = useRouter();
+  const [confirming, setConfirming] = useState<Order | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isCancelling, startCancel] = useTransition();
+
+  function confirmCancel(order: Order) {
+    startCancel(async () => {
+      const res = await cancelOrder(order.id);
+      if (!res.success) {
+        setCancelError(res.error ?? null);
+        return;
+      }
+      setConfirming(null);
+      setNotice(format(O.cancelled, { order: order.orderNumber }));
+      router.refresh();
+    });
+  }
 
   const filteredOrders = useMemo(() => {
     let result = [...orders];
@@ -125,6 +151,11 @@ export function OrdersList({
             </p>
           </div>
         </div>
+      )}
+      {notice && (
+        <p role="status" className="rounded-[var(--radius-lg)] border border-border bg-surface p-4 text-sm text-navy">
+          {notice}
+        </p>
       )}
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -339,6 +370,7 @@ export function OrdersList({
                           <Download className="h-3.5 w-3.5" />
                           {order.paymentStatus === "paid" ? O.invoice : O.proforma}
                         </a>
+                        {hasPaid(order) ? (
                         <Link
                           href={`/dashboard/orders/${order.id}`}
                           className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-brand px-4 text-xs font-semibold text-white hover:bg-brand-hover transition-colors"
@@ -346,6 +378,30 @@ export function OrdersList({
                           <Truck className="h-3.5 w-3.5" />
                           {O.track}
                         </Link>
+                        ) : (
+                          order.status !== "Cancelled" && (
+                            <span
+                              title={canPayDeposit(order) ? O.trackingLockedDeposit : O.trackingLocked}
+                              className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-surface-secondary px-4 text-xs font-medium text-text-secondary"
+                            >
+                              <Clock className="h-3.5 w-3.5" />
+                              {O.awaitingPayment}
+                            </span>
+                          )
+                        )}
+                        {cancellable.includes(order.status) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCancelError(null);
+                              setConfirming(order);
+                            }}
+                            className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-secondary hover:border-error/40 hover:text-error transition-colors"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
+                            {O.cancelOrder}
+                          </button>
+                        )}
                         <Link
                           href="/dashboard/messages"
                           className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] border border-border px-4 text-xs font-medium text-text-primary hover:bg-surface-secondary transition-colors"
@@ -376,6 +432,46 @@ export function OrdersList({
             {O.browse}
           </ButtonLink>
         </Card>
+      )}
+
+      {confirming && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
+          onClick={() => !isCancelling && setConfirming(null)}
+        >
+          <Card
+            role="alertdialog"
+            aria-modal="true"
+            className="w-full max-w-sm p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full bg-error/10 text-error">
+              <XCircle className="h-5 w-5" />
+            </div>
+            <h2 className="text-lg font-bold text-navy">{format(O.cancelTitle, { order: confirming.orderNumber })}</h2>
+            <p className="mt-2 text-sm text-text-secondary">
+              {hasPaid(confirming) ? O.cancelPaidBody : O.cancelBody}
+            </p>
+            {cancelError && <p role="alert" className="mt-3 rounded-[12px] bg-error/10 p-3 text-sm text-error">{cancelError}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirming(null)}
+                disabled={isCancelling}
+                className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-medium text-text-secondary hover:bg-surface-secondary"
+              >
+                {O.keepOrder}
+              </button>
+              <button
+                onClick={() => confirmCancel(confirming)}
+                disabled={isCancelling}
+                className="flex items-center gap-2 rounded-[var(--radius-sm)] bg-error px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {isCancelling && <Loader2 className="h-4 w-4 animate-spin" />}
+                {O.cancelOrder}
+              </button>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
