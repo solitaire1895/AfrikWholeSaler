@@ -17,7 +17,10 @@ import {
   Link as LinkIcon,
   Video,
   Trash,
+  FileSpreadsheet,
+  ImagePlus,
 } from "lucide-react";
+import { ProductImport } from "@/components/admin/product-import";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
@@ -35,12 +38,15 @@ import { categoryName, subCategoryName } from "@/i18n/names";
 
 interface ProductsManagerProps {
   products: Product[];
+  /** Imported from CSV, waiting for photos (hidden from the shop). */
+  drafts?: Product[];
   categories: Category[];
   subCategories: SubCategory[];
 }
 
 export function ProductsManager({
   products: initialProducts,
+  drafts = [],
   categories,
   subCategories,
 }: ProductsManagerProps) {
@@ -50,6 +56,9 @@ export function ProductsManager({
   const C = t.admin.common;
   const router = useRouter();
   const [confirmingDelete, setConfirmingDelete] = useState<Product | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const isDraft = (p: Product | null) => !!p && drafts.some((d) => d.id === p.id);
   const stock = t.catalog.stock as Record<string, string>;
   const [products, setProducts] = useState(initialProducts);
   const [search, setSearch] = useState("");
@@ -150,6 +159,7 @@ export function ProductsManager({
       const result = await deleteProduct(productId);
       if (result.success) {
         setProducts((prev) => prev.filter((p) => p.id !== productId));
+        if (drafts.some((d) => d.id === productId)) router.refresh();
       } else {
         setError(result.error || C.failed);
       }
@@ -336,7 +346,14 @@ export function ProductsManager({
       };
 
       if (editingProduct) {
-        const result = await updateProduct(editingProduct.id, input);
+        const wasDraft = isDraft(editingProduct);
+        const result = await updateProduct(editingProduct.id, { ...input, publish: wasDraft });
+        if (result.success && wasDraft) {
+          // Leaves the "needs media" list (and goes live once it has a photo).
+          closeForm();
+          router.refresh();
+          return;
+        }
         if (result.success) {
           // Update local state immediately
           setProducts((prev) =>
@@ -397,6 +414,13 @@ export function ProductsManager({
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setShowImport(true)}
+            className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] border border-border px-4 text-sm font-semibold text-navy hover:bg-surface-secondary transition-colors"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            {P.importCsv}
+          </button>
+          <button
             onClick={openAddForm}
             className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
           >
@@ -405,6 +429,59 @@ export function ProductsManager({
           </button>
         </div>
       </div>
+
+      {notice && (
+        <div role="status" className="flex items-center justify-between rounded-[var(--radius-sm)] border border-success/20 bg-success/10 px-4 py-3 text-sm text-navy">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} aria-label={C.dismiss} className="text-text-secondary hover:text-navy">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {drafts.length > 0 && (
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold text-navy">{format(P.needsMediaTitle, { count: drafts.length })}</h2>
+          <p className="mt-0.5 text-xs text-text-secondary">{P.needsMediaLead}</p>
+          <ul className="mt-3 max-h-72 divide-y divide-border overflow-y-auto">
+            {drafts.map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-text-primary">{d.name}</p>
+                  <p className="text-xs text-text-secondary">{categoryName(t, d.categorySlug, d.category)}</p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    onClick={() => openEditForm(d)}
+                    className="flex h-8 items-center gap-1.5 rounded-[var(--radius-sm)] bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-hover"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" /> {P.addMedia}
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDelete(d)}
+                    aria-label={C.delete}
+                    className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-text-secondary hover:bg-surface-secondary hover:text-error"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {showImport && (
+        <ProductImport
+          categories={categories}
+          subCategories={subCategories}
+          onClose={() => setShowImport(false)}
+          onImported={(count) => {
+            if (count > 0) setNotice(format(P.imported, { count }));
+            router.refresh();
+          }}
+        />
+      )}
 
       {error && (
         <div className="flex items-center justify-between rounded-[var(--radius-sm)] border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">

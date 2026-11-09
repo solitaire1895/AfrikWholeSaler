@@ -400,6 +400,21 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   return mapProduct(data as ProductRow);
 }
 
+/** Admin: products imported from a CSV that still need photos (hidden from the shop). */
+export async function getDraftProducts(): Promise<Product[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("is_active", false)
+    .eq("images", "[]")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (error || !data) return [];
+  return (data as ProductRow[]).map(mapProduct);
+}
+
 export async function getProductsByCategory(categorySlug: string): Promise<Product[]> {
   const supabase = await createClient();
   const { data, error } = await supabase

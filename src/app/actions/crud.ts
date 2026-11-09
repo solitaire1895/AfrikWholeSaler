@@ -3,6 +3,7 @@
 import { rateLimit } from "@/lib/rate-limit";
 import { detectImage, detectVideo } from "@/lib/file-signature";
 import { slugify } from "@/lib/slug";
+import { IMPORT_MAX_ROWS, type ImportRow } from "@/lib/product-import";
 
 /** URL-safe product slug, made unique ("men-hoodie", "men-hoodie-2"…). */
 async function uniqueProductSlug(
@@ -392,6 +393,78 @@ export async function createProduct(input: {
   return { success: true, data };
 }
 
+/**
+ * Admin: creates products from a CSV import as drafts (hidden, no media).
+ * Categories are checked again here; rows that fail are reported by line.
+ */
+export async function importProducts(
+  rows: ImportRow[]
+): Promise<ActionResult & { created?: number; failed?: { line: number; error: string }[] }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: await te("Unauthorized") };
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: await te("Only admins can create products.") };
+  }
+  if (!Array.isArray(rows) || rows.length === 0 || rows.length > IMPORT_MAX_ROWS) {
+    return { success: false, error: await te("The file must contain between 1 and 500 products.") };
+  }
+
+  const [{ data: cats }, { data: subs }] = await Promise.all([
+    supabase.from("categories").select("id, name, slug"),
+    supabase.from("sub_categories").select("id, name, slug, category_id"),
+  ]);
+  const catById = new Map((cats ?? []).map((c) => [c.id, c]));
+  const subById = new Map((subs ?? []).map((s) => [s.id, s]));
+
+  let created = 0;
+  const failed: { line: number; error: string }[] = [];
+  for (const row of rows) {
+    const cat = catById.get(row.categoryId);
+    const sub = row.subCategoryId ? subById.get(row.subCategoryId) : null;
+    const name = String(row.name ?? "").trim().slice(0, 200);
+    const tiers = Array.isArray(row.priceTiers) ? row.priceTiers.slice(0, 10) : [];
+    if (!name || !cat || (row.subCategoryId && (!sub || sub.category_id !== cat.id)) || tiers.length === 0) {
+      failed.push({ line: row.line, error: await te("Invalid category or price on this row.") });
+      continue;
+    }
+    const { error } = await supabase.from("products").insert({
+      name,
+      slug: await uniqueProductSlug(supabase, name),
+      description: String(row.description ?? "").slice(0, 5000),
+      category: cat.name,
+      category_slug: cat.slug,
+      category_id: cat.id,
+      sub_category: sub?.name ?? null,
+      sub_category_slug: sub?.slug ?? null,
+      sub_category_id: sub?.id ?? null,
+      origin_country: String(row.originCountry || "China").slice(0, 100),
+      images: [],
+      moq: Math.max(1, Math.floor(Number(row.moq) || 1)),
+      price_tiers: tiers.map((t) => ({
+        minQuantity: Math.max(1, Math.floor(Number(t.minQuantity) || 1)),
+        maxQuantity: t.maxQuantity == null ? null : Math.floor(Number(t.maxQuantity)),
+        price: Math.max(0, Number(t.price) || 0),
+        currency: "USD",
+      })),
+      stock_status: ["In Stock", "Low Stock", "Out of Stock", "Pre-Order"].includes(row.stockStatus) ? row.stockStatus : "In Stock",
+      stock_quantity: Math.max(0, Math.floor(Number(row.stockQuantity) || 0)),
+      badges: [],
+      specs: [],
+      featured: row.featured === true,
+      delivery_days_min: row.deliveryDaysMin || null,
+      delivery_days_max: row.deliveryDaysMax || null,
+      is_active: false, // published when the first photo is added
+    });
+    if (error) failed.push({ line: row.line, error: error.message });
+    else created++;
+  }
+
+  revalidatePath("/admin/products");
+  return { success: true, created, failed };
+}
+
 export async function updateProduct(productId: string, input: Record<string, unknown>): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -420,6 +493,8 @@ export async function updateProduct(productId: string, input: Record<string, unk
   if (input.subCategoryId !== undefined) updateData.sub_category_id = input.subCategoryId;
   if (input.originCountry !== undefined) updateData.origin_country = input.originCountry;
   if (input.images !== undefined) updateData.images = input.images;
+  // An imported draft goes live as soon as it has a photo.
+  if (Array.isArray(input.images) && input.images.length > 0 && input.publish === true) updateData.is_active = true;
   if (input.videoUrl !== undefined) updateData.video_url = input.videoUrl;
   if (input.moq !== undefined) updateData.moq = input.moq;
   if (input.priceTiers !== undefined) updateData.price_tiers = input.priceTiers;
@@ -461,6 +536,10 @@ export async function deleteProduct(productId: string): Promise<ActionResult> {
   if (!profile || !["admin", "super_admin"].includes(profile.role)) {
     return { success: false, error: await te("Only admins can delete products.") };
   }
+
+  // A CSV draft (never published, no photos) is removed for good; published
+  // products are only hidden so past orders keep their link.
+  await supabase.from("products").delete().eq("id", productId).eq("is_active", false).eq("images", "[]");
 
   const { error } = await supabase
     .from("products")
