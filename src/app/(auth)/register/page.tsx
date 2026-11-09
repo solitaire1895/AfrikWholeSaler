@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { returnTo, clearReturnTo } from "@/lib/return-to";
 import {
   User,
   Mail,
@@ -102,6 +103,8 @@ export default function RegisterPage() {
           email: formData.email,
           password: formData.password,
           options: {
+            // The confirmation email link also brings them back to the shared product.
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(returnTo())}`,
             data: {
               first_name: formData.firstName,
               last_name: formData.lastName,
@@ -118,7 +121,9 @@ export default function RegisterPage() {
           // If email confirmation is required, show a message.
           // If not, redirect to dashboard.
           if (data.session) {
-            router.push("/products");
+            const target = returnTo();
+            clearReturnTo();
+            router.push(target);
             router.refresh();
           } else {
             // Email confirmation required — redirect to login with notice

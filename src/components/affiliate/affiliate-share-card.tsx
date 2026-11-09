@@ -9,11 +9,15 @@ import { getMyAffiliate, joinAffiliateProgram, trackAffiliateVisit, type MyAffil
 import { AFFILIATE_RATE, affiliateLink } from "@/lib/affiliate";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
+import { rememberReturnTo } from "@/lib/return-to";
 
 /** Records a visit that arrived through ?ref=CODE (sets the attribution cookie). */
 export function AffiliateTracker({ code, productId }: { code?: string; productId: string }) {
   useEffect(() => {
-    if (code) trackAffiliateVisit(code, productId);
+    if (!code) return;
+    trackAffiliateVisit(code, productId);
+    // A guest who signs up from here comes back to this product afterwards.
+    rememberReturnTo(window.location.pathname);
   }, [code, productId]);
   return null;
 }

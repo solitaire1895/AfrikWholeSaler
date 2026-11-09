@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense } from "react";
+import { returnTo, clearReturnTo } from "@/lib/return-to";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
@@ -20,7 +21,7 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   // Only same-site paths: "/dashboard/orders" is fine; "https://…", "//…" and "/\…" are not.
   const requested = searchParams.get("redirect") ?? "";
-  const redirect = isSafeRedirect(requested) ? requested : "/products";
+  const redirect = isSafeRedirect(requested) ? requested : returnTo();
   const t = useT();
   const L = t.auth.login;
   const E = t.auth.errors;
@@ -68,6 +69,7 @@ function LoginPageContent() {
             });
           }
 
+          clearReturnTo();
           router.push(redirect);
           router.refresh();
         }

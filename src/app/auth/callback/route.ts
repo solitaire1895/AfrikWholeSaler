@@ -9,7 +9,9 @@ import { createServerClient } from "@supabase/ssr";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/products";
+  // Same-site paths only.
+  const wanted = searchParams.get("next") ?? "";
+  const next = wanted.startsWith("/") && !wanted.startsWith("//") && !wanted.startsWith("/\\") ? wanted : "/products";
 
   if (code) {
     const supabase = createServerClient(
