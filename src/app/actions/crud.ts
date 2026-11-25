@@ -21,8 +21,6 @@ async function uniqueProductSlug(
 import { te } from "@/i18n/errors";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { after } from "next/server";
-import { indexProductPhotos } from "@/lib/visual-search";
 
 // ========================================================
 // Server Actions — AfrikWholesaler CRUD
@@ -393,8 +391,6 @@ export async function createProduct(input: {
 
   if (error) return { success: false, error: error.message };
 
-  // Camera search: embed the new main photo once the response is sent.
-  if (data?.id) after(() => indexProductPhotos({ ids: [data.id] }).catch(() => {}));
   revalidatePath("/admin/products");
   revalidatePath("/products");
   return { success: true, data };
@@ -525,8 +521,6 @@ export async function updateProduct(productId: string, input: Record<string, unk
 
   if (error) return { success: false, error: error.message };
 
-  // Camera search: embed the new main photo once the response is sent.
-  if (data?.id) after(() => indexProductPhotos({ ids: [data.id] }).catch(() => {}));
   revalidatePath("/admin/products");
   revalidatePath("/products");
   return { success: true, data };

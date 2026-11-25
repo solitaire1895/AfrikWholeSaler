@@ -10,6 +10,7 @@ import { useCurrency } from "@/lib/currency-context";
 import { cn } from "@/lib/utils";
 import { NotFoundChat } from "@/components/search/not-found-chat";
 import { OPEN_CHAT_EVENT } from "@/components/chat/chat-widget";
+import { embedBlob, loadEmbedder } from "@/lib/visual-search-client";
 
 type Result = {
   id: string;
@@ -43,12 +44,9 @@ async function shrink(file: File): Promise<Blob> {
   }
 }
 
-let warmed = false;
-/** Asks the server to load the model before the first photo arrives. */
+/** Starts downloading the photo model (≈12 MB, cached afterwards) before the first photo. */
 function warmUp() {
-  if (warmed) return;
-  warmed = true;
-  fetch("/api/search/image", { method: "GET", priority: "low" } as RequestInit).catch(() => {});
+  loadEmbedder().catch(() => {});
 }
 
 /** Camera icon (for the search bar) that opens the photo search dialog. */
@@ -114,9 +112,13 @@ function CameraSearchDialog({ onClose }: { onClose: () => void }) {
     setPreview(URL.createObjectURL(file));
     setState("searching");
     try {
-      const body = new FormData();
-      body.append("image", await shrink(file), "photo.jpg");
-      const res = await fetch("/api/search/image", { method: "POST", body });
+      // The photo never leaves the device: only its 512-number description does.
+      const embedding = await embedBlob(await shrink(file));
+      const res = await fetch("/api/search/image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ embedding }),
+      });
       const json = (await res.json().catch(() => ({}))) as { results?: Result[]; error?: ErrorCode };
       if (!res.ok) {
         setError(json.error && json.error in C.errors ? json.error : "generic");

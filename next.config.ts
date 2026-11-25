@@ -29,6 +29,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Camera search runs transformers.js in the browser: its Node-only
+  // dependencies must not be bundled for the client.
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.alias = { ...config.resolve.alias, sharp$: false, "onnxruntime-node$": false };
+    }
+    return config;
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

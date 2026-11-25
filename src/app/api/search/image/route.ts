@@ -1,35 +1,26 @@
-import { after } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { detectImage } from "@/lib/file-signature";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { embedImage, getEmbedder, toVector } from "@/lib/visual-search";
+import { parseEmbedding, toVector } from "@/lib/visual-search";
 import { getLocale } from "@/i18n/server";
 import { localizedText } from "@/lib/product-i18n";
 
-// POST /api/search/image (multipart "image") → products that look like the photo.
-// GET  /api/search/image → loads the model in the background (sent when the
-// camera button is shown, so the first real search is fast).
+// POST /api/search/image { embedding: number[512] } → products that look like
+// the photo. The browser computes the embedding (visual-search-client.ts);
+// this server only runs the database lookup.
 
-const MAX_BYTES = 6 * 1024 * 1024;
-/** CLIP photo-to-photo similarity below this is mostly "same colours/background". */
-const MIN_SIMILARITY = 0.55;
+/** Similarity below this is mostly "same colours/background". */
+const MIN_SIMILARITY = 0.5;
 
+/** Old clients warmed up a server model here; nothing to do any more. */
 export async function GET() {
-  after(() => getEmbedder().catch(() => {}));
   return new Response(null, { status: 204 });
 }
 
 export async function POST(request: Request) {
-  const form = await request.formData().catch(() => null);
-  const file = form?.get("image");
-  if (!(file instanceof Blob) || file.size === 0) return Response.json({ error: "no_image" }, { status: 400 });
-  if (file.size > MAX_BYTES) return Response.json({ error: "too_large" }, { status: 413 });
-  if (!(await detectImage(file))) return Response.json({ error: "not_image" }, { status: 415 });
-
-  // Embedding and the rate-limit check run side by side.
-  const ip = await clientIp();
-  const [allowed, embedding] = await Promise.all([rateLimit(`image-search:${ip}`, 40, 3600), embedImage(file)]);
-  if (!allowed) return Response.json({ error: "rate_limited" }, { status: 429 });
+  const body = (await request.json().catch(() => null)) as { embedding?: unknown } | null;
+  const embedding = parseEmbedding(body?.embedding);
+  if (!embedding) return Response.json({ error: "not_image" }, { status: 400 });
+  if (!(await rateLimit(`image-search:${await clientIp()}`, 60, 3600))) return Response.json({ error: "rate_limited" }, { status: 429 });
 
   const supabase = await createClient();
   const { data: matches, error } = await supabase.rpc("match_products_by_image", {

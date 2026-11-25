@@ -65,7 +65,46 @@ export function readTranslations(formData: FormData): NonNullable<Product["trans
   return out;
 }
 
-/** Admin: embeds every product photo for camera search, batch by batch. */
+/**
+ * Embeds the product photos that aren't indexed yet, in this browser
+ * (the server can't run the model). Returns how many were indexed.
+ */
+export async function indexPendingPhotos(onProgress?: (done: number) => void): Promise<number> {
+  const { embedBlob, MODEL_TAG } = await import("@/lib/visual-search-client");
+  let total = 0;
+  const failed = new Set<string>();
+  for (let round = 0; round < 500; round++) {
+    const res = await fetch(`/api/search/image/index?model=${MODEL_TAG}`, { cache: "no-store" });
+    const json = (await res.json().catch(() => ({}))) as { items?: { id: string; url: string }[]; error?: string };
+    if (!res.ok) throw new Error(json.error || String(res.status));
+    const items = (json.items ?? []).filter((i) => !failed.has(i.id));
+    if (items.length === 0) break;
+
+    const batch: { id: string; url: string; embedding: number[] }[] = [];
+    for (const item of items) {
+      try {
+        const photo = await fetch(item.url, { mode: "cors" });
+        if (!photo.ok) throw new Error(String(photo.status));
+        batch.push({ ...item, embedding: await embedBlob(await photo.blob()) });
+      } catch {
+        failed.add(item.id); // unreadable photo: skip it this run
+      }
+    }
+    if (batch.length) {
+      const save = await fetch("/api/search/image/index", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: MODEL_TAG, items: batch }),
+      });
+      if (!save.ok) throw new Error(((await save.json().catch(() => ({}))) as { error?: string }).error || String(save.status));
+      total += batch.length;
+      onProgress?.(total);
+    }
+  }
+  return total;
+}
+
+/** Admin: indexes every product photo for camera search. */
 export function PhotoIndexButton() {
   const { t, format } = useI18n();
   const T = t.discovery.translations;
@@ -76,18 +115,9 @@ export function PhotoIndexButton() {
   async function run() {
     setBusy(true);
     setMessage(null);
-    let total = 0;
     setDone(0);
     try {
-      for (let i = 0; i < 400; i++) {
-        const res = await fetch("/api/search/image/index", { method: "POST" });
-        const json = (await res.json().catch(() => ({}))) as { indexed?: number; remaining?: number; error?: string };
-        if (!res.ok) throw new Error(json.error || String(res.status));
-        total += json.indexed ?? 0;
-        setDone(total);
-        // Stop when finished, or when a batch made no progress (unreadable photos).
-        if (!json.remaining || !json.indexed) break;
-      }
+      const total = await indexPendingPhotos(setDone);
       setMessage(format(T.indexDone, { n: total }));
     } catch (err) {
       setMessage(format(T.indexFailed, { error: err instanceof Error ? err.message : String(err) }));

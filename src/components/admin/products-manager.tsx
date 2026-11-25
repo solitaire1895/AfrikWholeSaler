@@ -21,7 +21,7 @@ import {
   ImagePlus,
 } from "lucide-react";
 import { ProductImport } from "@/components/admin/product-import";
-import { PhotoIndexButton, TranslationFields, readTranslations } from "@/components/admin/product-translations";
+import { PhotoIndexButton, TranslationFields, indexPendingPhotos, readTranslations } from "@/components/admin/product-translations";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
@@ -406,6 +406,8 @@ export function ProductsManager({
       if (editingProduct) {
         const wasDraft = isDraft(editingProduct);
         const result = await updateProduct(editingProduct.id, { ...input, publish: wasDraft });
+        // Camera search: index the new photo from this browser, in the background.
+        if (result.success) indexPendingPhotos().catch(() => {});
         if (result.success && wasDraft) {
           // Leaves the "needs media" list (and goes live once it has a photo).
           closeForm();
@@ -445,6 +447,8 @@ export function ProductsManager({
         }
       } else {
         const result = await createProduct(input);
+        // Camera search: index the new photo from this browser, in the background.
+        if (result.success) indexPendingPhotos().catch(() => {});
         if (result.success) {
           // Fetch the fresh list from the server without reloading the page.
           closeForm();
