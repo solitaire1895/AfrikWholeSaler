@@ -171,7 +171,11 @@ export function Navbar() {
             onClick={() => setSearchOpen((o) => !o)}
             aria-label={searchOpen ? t.layout.nav.closeSearch : t.layout.nav.openSearch}
             aria-expanded={searchOpen}
-            className="hidden h-10 w-10 items-center justify-center rounded-full text-text-primary transition-colors hover:bg-surface-secondary md:flex"
+            // The Products page has its own search box: no second one in the bar.
+            className={cn(
+              "hidden h-10 w-10 items-center justify-center rounded-full text-text-primary transition-colors hover:bg-surface-secondary",
+              currentPath !== "/products" && "md:flex"
+            )}
           >
             {searchOpen ? <X className="h-[18px] w-[18px]" /> : <Search className="h-[18px] w-[18px]" />}
           </button>
@@ -257,7 +261,7 @@ export function Navbar() {
       </nav>
 
       {/* Desktop search panel, full width under the bar */}
-      {searchOpen && (
+      {searchOpen && currentPath !== "/products" && (
         <div className="hidden border-t border-border/60 bg-surface/95 backdrop-blur md:block">
           <div className="mx-auto max-w-3xl px-4 py-4 sm:px-6">
             <SearchBar className="w-full" autoFocus onNavigate={() => setSearchOpen(false)} />

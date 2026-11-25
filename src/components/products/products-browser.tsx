@@ -1,6 +1,7 @@
 "use client";
 
 import { NotFoundChat } from "@/components/search/not-found-chat";
+import { CameraSearchButton } from "@/components/search/camera-search";
 
 import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
@@ -217,17 +218,21 @@ export function ProductsBrowser({
                 placeholder={L.searchPlaceholder}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="h-12 w-full rounded-full border border-border bg-surface pl-11 pr-10 text-sm text-text-primary placeholder:text-text-disabled transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                className="h-12 w-full rounded-full border border-border bg-surface pl-11 pr-20 text-sm text-text-primary placeholder:text-text-disabled transition-all focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
               />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  aria-label={L.clear}
-                  className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-text-disabled hover:bg-surface-secondary hover:text-text-primary"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+              <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    aria-label={L.clear}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-text-disabled hover:bg-surface-secondary hover:text-text-primary"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+                {/* The only search box on this page: photo search lives here too */}
+                <CameraSearchButton />
+              </div>
             </div>
             <div className="flex gap-3">
               <select
