@@ -3,22 +3,42 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useSyncExternalStore, ReactNode } from "react";
 import { useI18n } from "@/i18n/client";
 import { intlLocale } from "@/i18n/config";
-import { CURRENCIES, DEFAULT_CURRENCY, formatAmount, type CurrencyInfo } from "@/lib/currencies";
+import {
+  COUNTRY_COOKIE,
+  CURRENCIES,
+  DEFAULT_CURRENCY,
+  currencyForCountry,
+  formatAmount,
+  guessCountryFromDevice,
+  type CurrencyInfo,
+} from "@/lib/currencies";
 
 // ========================================================
 // Display currency for the whole site. Prices are stored in USD; the visitor
-// picks a currency (remembered in this browser) and every price converts.
+// sees the currency of their country (from the host's IP geolocation, else the
+// device) until they pick one, which is remembered in this browser.
 // ========================================================
 
 const STORAGE_KEY = "preferred_currency";
 const CHANGE_EVENT = "aw:currency-change";
 
+/** The visitor's country: from the host's geolocation (cookie set by the proxy), else the device. */
+function detectedCurrency(): string {
+  const fromCookie = document.cookie.match(new RegExp(`(?:^|; )${COUNTRY_COOKIE}=([A-Za-z]{2})`))?.[1];
+  return currencyForCountry(fromCookie) ?? currencyForCountry(guessCountryFromDevice()) ?? DEFAULT_CURRENCY;
+}
+
+let detected: string | null = null;
+
+/** A currency the visitor picked wins; otherwise the one of their country. */
 function readSaved(): string {
   try {
-    return localStorage.getItem(STORAGE_KEY) || DEFAULT_CURRENCY;
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return saved;
   } catch {
-    return DEFAULT_CURRENCY;
+    // storage blocked
   }
+  return (detected ??= detectedCurrency());
 }
 
 function subscribe(onChange: () => void) {

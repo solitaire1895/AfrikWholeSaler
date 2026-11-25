@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { defaultLocale, isLocale, LOCALE_COOKIE, type Locale } from "@/i18n/config";
 import { LOCALE_HEADER, PATH_HEADER, localizePath, prefixedLocales, splitLocalePath } from "@/i18n/routing";
+import { COUNTRY_COOKIE } from "@/lib/currencies";
 
 /**
  * Cookie options for persistent sessions (30 days).
@@ -147,6 +148,19 @@ export async function proxy(request: NextRequest) {
     response.cookies.set(LOCALE_COOKIE, urlLocale, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   }
 
+  // Visitor's country from the host/CDN geolocation header (Vercel, Cloudflare…),
+  // read by the browser to show prices in the local currency.
+  const country = (
+    request.headers.get("x-vercel-ip-country") ||
+    request.headers.get("cf-ipcountry") ||
+    request.headers.get("cloudfront-viewer-country") ||
+    request.headers.get("x-country-code") ||
+    ""
+  ).toUpperCase();
+  if (/^[A-Z]{2}$/.test(country) && country !== "XX" && request.cookies.get(COUNTRY_COOKIE)?.value !== country) {
+    response.cookies.set(COUNTRY_COOKIE, country, { path: "/", maxAge: 60 * 60 * 24 * 7, sameSite: "lax" });
+  }
+
   return response;
 }
 
@@ -162,6 +176,6 @@ export const config = {
      * - auth callback route (handled separately)
      * - landing/ (public media)
      */
-    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|auth/callback|landing/).*)",
+    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|auth/callback|landing/|google[0-9a-f]+\.html).*)",
   ],
 };

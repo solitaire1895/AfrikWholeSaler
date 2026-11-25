@@ -6,20 +6,8 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/client";
 import { intlLocale } from "@/i18n/config";
 import { useCurrency } from "@/lib/currency-context";
-import { CURRENCY_REGIONS } from "@/lib/currencies";
+import { CURRENCY_COUNTRIES as COUNTRIES, CURRENCY_REGIONS } from "@/lib/currencies";
 
-/** Countries using each currency, so visitors can search "Cameroun", "Kenya"… */
-const COUNTRIES: Record<string, string[]> = {
-  XAF: ["CM", "GA", "CG", "TD", "CF", "GQ"],
-  XOF: ["SN", "CI", "BJ", "BF", "ML", "NE", "TG", "GW"],
-  CDF: ["CD"], AOA: ["AO"], RWF: ["RW"], BIF: ["BI"], STN: ["ST"],
-  NGN: ["NG"], GHS: ["GH"], GNF: ["GN"], SLE: ["SL"], LRD: ["LR"], GMD: ["GM"], CVE: ["CV"], MRU: ["MR"],
-  KES: ["KE"], UGX: ["UG"], TZS: ["TZ"], ETB: ["ET"], SOS: ["SO"], DJF: ["DJ"], ERN: ["ER"], SSP: ["SS"],
-  MGA: ["MG"], MUR: ["MU"], SCR: ["SC"], KMF: ["KM"],
-  EGP: ["EG"], MAD: ["MA"], DZD: ["DZ"], TND: ["TN"], LYD: ["LY"], SDG: ["SD"],
-  ZAR: ["ZA"], BWP: ["BW"], NAD: ["NA"], SZL: ["SZ"], LSL: ["LS"], ZMW: ["ZM"], MWK: ["MW"], MZN: ["MZ"], ZWG: ["ZW"],
-  USD: ["US"], EUR: ["FR", "DE", "BE"], GBP: ["GB"], CNY: ["CN"],
-};
 
 /** Strips accents so "cote" finds "Côte d'Ivoire". */
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -96,11 +84,11 @@ export function CurrencySwitcher({
         aria-haspopup="listbox"
         aria-expanded={open}
         className={cn(
-          "flex h-10 items-center gap-1 rounded-full px-2.5 text-sm font-medium transition-colors",
+          "flex h-10 items-center gap-1 rounded-full px-1.5 text-sm font-medium transition-colors sm:px-2.5",
           tone === "dark" ? "text-white/80 hover:bg-white/10 hover:text-white" : "text-text-primary hover:bg-surface-secondary"
         )}
       >
-        <span className="text-xs opacity-70">{info.symbol}</span>
+        <span className="hidden text-xs opacity-70 sm:inline">{info.symbol}</span>
         <span>{currency}</span>
         <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
       </button>
@@ -108,7 +96,8 @@ export function CurrencySwitcher({
       {open && (
         <div
           className={cn(
-            "absolute z-[90] w-[min(18rem,calc(100vw-2rem))] animate-[scale-in_0.15s_ease-out] overflow-hidden rounded-[16px] border border-border bg-surface text-text-primary shadow-[var(--shadow-dropdown)]",
+            // Phones: pinned across the screen so it never runs off the edge.
+            "absolute z-[90] w-[min(18rem,calc(100vw-2rem))] animate-[scale-in_0.15s_ease-out] max-sm:fixed max-sm:inset-x-3 max-sm:top-16 max-sm:bottom-auto max-sm:w-auto max-sm:mt-0 max-sm:mb-0 overflow-hidden rounded-[16px] border border-border bg-surface text-text-primary shadow-[var(--shadow-dropdown)]",
             align === "right" ? "right-0" : "left-0",
             direction === "down" ? "top-full mt-2" : "bottom-full mb-2"
           )}

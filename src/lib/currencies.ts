@@ -96,3 +96,74 @@ export function formatAmount(amount: number, info: CurrencyInfo, numberLocale: s
   // Letter symbols get a space ("KSh 322"); sign symbols stick ("₦3,875").
   return /[A-Za-z]$/.test(info.symbol) ? `${info.symbol} ${n}` : `${info.symbol}${n}`;
 }
+
+// ========================================================
+// Currency from the visitor's country.
+// ========================================================
+
+/** Countries using each currency (also lets the picker find "Cameroun", "Kenya"…). */
+export const CURRENCY_COUNTRIES: Record<string, string[]> = {
+  XAF: ["CM", "GA", "CG", "TD", "CF", "GQ"],
+  XOF: ["SN", "CI", "BJ", "BF", "ML", "NE", "TG", "GW"],
+  CDF: ["CD"], AOA: ["AO"], RWF: ["RW"], BIF: ["BI"], STN: ["ST"],
+  NGN: ["NG"], GHS: ["GH"], GNF: ["GN"], SLE: ["SL"], LRD: ["LR"], GMD: ["GM"], CVE: ["CV"], MRU: ["MR"],
+  KES: ["KE"], UGX: ["UG"], TZS: ["TZ"], ETB: ["ET"], SOS: ["SO"], DJF: ["DJ"], ERN: ["ER"], SSP: ["SS"],
+  MGA: ["MG"], MUR: ["MU"], SCR: ["SC"], KMF: ["KM"],
+  EGP: ["EG"], MAD: ["MA", "EH"], DZD: ["DZ"], TND: ["TN"], LYD: ["LY"], SDG: ["SD"],
+  ZAR: ["ZA"], BWP: ["BW"], NAD: ["NA"], SZL: ["SZ"], LSL: ["LS"], ZMW: ["ZM"], MWK: ["MW"], MZN: ["MZ"], ZWG: ["ZW"],
+  USD: ["US", "EC", "SV", "PA", "PR", "TL", "ZW"],
+  EUR: ["FR", "DE", "BE", "IT", "ES", "PT", "NL", "LU", "AT", "IE", "FI", "GR", "SK", "SI", "EE", "LV", "LT", "MT", "CY", "HR", "MC", "AD", "SM", "VA", "ME", "XK", "RE", "YT", "GP", "MQ", "GF"],
+  GBP: ["GB", "IM", "JE", "GG"],
+  CNY: ["CN"],
+};
+
+const COUNTRY_TO_CURRENCY = new Map<string, string>();
+for (const [code, countries] of Object.entries(CURRENCY_COUNTRIES))
+  for (const cc of countries) if (!COUNTRY_TO_CURRENCY.has(cc)) COUNTRY_TO_CURRENCY.set(cc, code);
+
+/** "CM" → "XAF"; null for countries without a listed currency (they keep USD). */
+export function currencyForCountry(country: string | null | undefined): string | null {
+  return country ? COUNTRY_TO_CURRENCY.get(country.toUpperCase()) ?? null : null;
+}
+
+/** Cookie set by the proxy from the hosting's IP-country header (CDN geolocation). */
+export const COUNTRY_COOKIE = "aw_country";
+
+/**
+ * Fallback when the host sends no country: the device's time zone.
+ * Windows reports one zone for many countries (all of West-Central Africa is
+ * "Africa/Lagos", all of GMT West Africa "Atlantic/Reykjavik"), so the
+ * language breaks the tie: French there is far more likely FCFA than naira.
+ */
+const ZONE_COUNTRY: Record<string, string> = {
+  Abidjan: "CI", Accra: "GH", Addis_Ababa: "ET", Algiers: "DZ", Asmara: "ER", Bamako: "ML", Bangui: "CF", Banjul: "GM",
+  Bissau: "GW", Blantyre: "MW", Brazzaville: "CG", Bujumbura: "BI", Cairo: "EG", Casablanca: "MA", Conakry: "GN",
+  Dakar: "SN", Dar_es_Salaam: "TZ", Djibouti: "DJ", Douala: "CM", El_Aaiun: "EH", Freetown: "SL", Gaborone: "BW",
+  Harare: "ZW", Johannesburg: "ZA", Juba: "SS", Kampala: "UG", Khartoum: "SD", Kigali: "RW", Kinshasa: "CD",
+  Lagos: "NG", Libreville: "GA", Lome: "TG", Luanda: "AO", Lubumbashi: "CD", Lusaka: "ZM", Malabo: "GQ", Maputo: "MZ",
+  Maseru: "LS", Mbabane: "SZ", Mogadishu: "SO", Monrovia: "LR", Nairobi: "KE", Ndjamena: "TD", Niamey: "NE",
+  Nouakchott: "MR", Ouagadougou: "BF", "Porto-Novo": "BJ", Sao_Tome: "ST", Tripoli: "LY", Tunis: "TN", Windhoek: "NA",
+  Antananarivo: "MG", Mauritius: "MU", Mahe: "SC", Comoro: "KM", Cape_Verde: "CV", Shanghai: "CN", London: "GB",
+  Paris: "FR", Brussels: "BE", Berlin: "DE", Madrid: "ES", Rome: "IT", New_York: "US", Chicago: "US", Los_Angeles: "US",
+};
+
+export function guessCountryFromDevice(): string | null {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    const city = zone.split("/").pop() ?? "";
+    const langs = navigator.languages?.length ? navigator.languages : [navigator.language];
+    // A region in the language tag ("fr-CM") is the clearest hint.
+    for (const l of langs) {
+      const region = l.split("-")[1];
+      if (region && region.length === 2 && region !== "US" && region !== "FR" && region !== "GB" && currencyForCountry(region)) {
+        if (ZONE_COUNTRY[city] === region || !ZONE_COUNTRY[city]) return region.toUpperCase();
+      }
+    }
+    const french = langs.some((l) => l.toLowerCase().startsWith("fr"));
+    if (city === "Lagos") return french ? "CM" : "NG";
+    if (city === "Reykjavik") return french ? "SN" : null;
+    return ZONE_COUNTRY[city] ?? null;
+  } catch {
+    return null;
+  }
+}

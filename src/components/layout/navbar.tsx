@@ -175,7 +175,7 @@ export function Navbar() {
           >
             {searchOpen ? <X className="h-[18px] w-[18px]" /> : <Search className="h-[18px] w-[18px]" />}
           </button>
-          <CurrencySwitcher className="hidden sm:block" />
+          <CurrencySwitcher />
           <LanguageSwitcher />
           <NotificationBell />
           <CartButton />
@@ -271,11 +271,6 @@ export function Navbar() {
           <div className="px-4 py-4 space-y-3">
             {/* Mobile Search */}
             <SearchBar onNavigate={() => setMobileOpen(false)} />
-
-            <div className="flex items-center justify-between px-3 sm:hidden">
-              <span className="text-sm font-medium text-text-primary">{t.layout.currency.title}</span>
-              <CurrencySwitcher />
-            </div>
 
             <Link
               href="/products"
