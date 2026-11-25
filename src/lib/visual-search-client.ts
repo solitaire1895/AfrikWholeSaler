@@ -1,8 +1,9 @@
 "use client";
 
 // ========================================================
-// Camera search, in the browser. Apple's MobileCLIP-S0 (≈12 MB, downloaded
-// once then cached by the browser) turns a photo into 512 numbers; the
+// Camera search, in the browser. Apple's MobileCLIP-S0 in fp16 (≈23 MB; the 8-bit
+// version was too inaccurate), downloaded once from our own site then cached by
+// the browser, turns a photo into 512 numbers; the
 // server only compares those numbers with the catalogue (pgvector), so the
 // shop's server never runs the model.
 // Shop photos are indexed the same way, in the admin's browser.
@@ -10,7 +11,7 @@
 
 export const MODEL_ID = "Xenova/mobileclip_s0";
 /** Stored with each product's embedding: a new model re-indexes every photo. */
-export const MODEL_TAG = "mobileclip_s0";
+export const MODEL_TAG = "mobileclip_s0_fp16";
 
 type Embedder = (image: Blob) => Promise<number[]>;
 let loading: Promise<Embedder> | null = null;
@@ -18,10 +19,14 @@ let loading: Promise<Embedder> | null = null;
 export function loadEmbedder(): Promise<Embedder> {
   loading ??= (async () => {
     const { AutoProcessor, CLIPVisionModelWithProjection, RawImage, env } = await import("@huggingface/transformers");
-    env.allowLocalModels = false;
+    // Served by our own site (public/models/…): Hugging Face's servers are
+    // slow or unreachable from some networks, which left indexing empty.
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.localModelPath = "/models/";
     const [processor, model] = await Promise.all([
       AutoProcessor.from_pretrained(MODEL_ID),
-      CLIPVisionModelWithProjection.from_pretrained(MODEL_ID, { dtype: "q8" }),
+      CLIPVisionModelWithProjection.from_pretrained(MODEL_ID, { dtype: "fp16" }),
     ]);
     return async (image: Blob) => {
       const raw = await RawImage.fromBlob(image);

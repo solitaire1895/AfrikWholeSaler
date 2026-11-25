@@ -4,6 +4,8 @@ import { NotFoundChat } from "@/components/search/not-found-chat";
 import { CameraSearchButton } from "@/components/search/camera-search";
 
 import { useState, useMemo } from "react";
+
+const PAGE_SIZE = 48;
 import { useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, X, Package } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
@@ -119,6 +121,12 @@ export function ProductsBrowser({
   }, [search, selectedCategory, selectedSubCategory, selectedStock, sortBy, initialFilter, products]);
 
   // Get sub-categories for the selected category
+  // Render a page of cards at a time: all ~900 at once made an 8 MB page.
+  // A filter or sort change starts again from the first page.
+  const filterKey = filteredProducts.map((p) => p.id).join(",").slice(0, 2000) + filteredProducts.length;
+  const [shown, setShown] = useState({ key: "", n: PAGE_SIZE });
+  const visible = shown.key === filterKey ? shown.n : PAGE_SIZE;
+
   const availableSubCategories = useMemo(() => {
     if (selectedCategory === "all") return [];
     return subCategories.filter((sc) => sc.categorySlug === selectedCategory);
@@ -334,9 +342,19 @@ export function ProductsBrowser({
             <div className="flex-1">
               {filteredProducts.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {filteredProducts.map((product) => (
+                  {filteredProducts.slice(0, visible).map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
+                  {filteredProducts.length > visible && (
+                    <div className="col-span-full flex justify-center pt-4">
+                      <button
+                        onClick={() => setShown({ key: filterKey, n: visible + PAGE_SIZE })}
+                        className="h-11 rounded-full border border-border bg-surface px-6 text-sm font-semibold text-navy transition-colors hover:bg-surface-secondary"
+                      >
+                        {format(L.showMore, { n: filteredProducts.length - visible })}
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <NotFoundChat className="my-12">

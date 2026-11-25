@@ -1168,3 +1168,19 @@ export async function getCountries(): Promise<Array<{ id: number; name: string; 
   if (error || !data) return [];
   return data as Array<{ id: number; name: string; code: string; region: string }>;
 }
+
+/**
+ * What a product card and the list filters need, nothing more. Lists send
+ * every product to the browser: full descriptions, translations and specs
+ * made /products weigh 8 MB.
+ */
+export function toCard(p: Product): Product {
+  return {
+    ...p,
+    description: p.description.length > 200 ? `${p.description.slice(0, 200)}…` : p.description,
+    images: p.images.slice(0, 1),
+    specs: [],
+    videoUrl: null,
+    translations: undefined,
+  };
+}

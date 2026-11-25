@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { getProducts, getCategories, getSubCategories } from "@/lib/queries";
+import { getProducts, getCategories, getSubCategories, toCard } from "@/lib/queries";
 import { ProductsBrowser } from "@/components/products/products-browser";
 
 export default async function ProductsPage() {
@@ -12,7 +12,7 @@ export default async function ProductsPage() {
   return (
     <Suspense fallback={null}>
       <ProductsBrowser
-        products={products}
+        products={products.map(toCard)}
         categories={categories}
         subCategories={subCategories}
       />

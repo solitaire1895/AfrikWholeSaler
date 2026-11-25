@@ -174,8 +174,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico, sitemap.xml, robots.txt (metadata files)
      * - auth callback route (handled separately)
-     * - landing/ (public media)
+     * - landing/ (public media), models/ (camera search model files)
      */
-    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|auth/callback|landing/|google[0-9a-f]+\.html).*)",
+    "/((?!api|monitoring|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|auth/callback|landing/|models/|google[0-9a-f]+\.html).*)",
   ],
 };

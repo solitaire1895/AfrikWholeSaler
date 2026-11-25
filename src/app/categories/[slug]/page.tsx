@@ -3,6 +3,7 @@ import {
   getCategories,
   getSubCategoriesByCategory,
   getProductsByCategory,
+  toCard,
 } from "@/lib/queries";
 import { CategoryBrowser, CategoryNotFound } from "@/components/categories/category-browser";
 
@@ -28,7 +29,7 @@ export default async function CategoryPage({
     <CategoryBrowser
       category={category}
       subCategories={subCategories}
-      products={products}
+      products={products.map(toCard)}
       allCategories={allCategories}
     />
   );
