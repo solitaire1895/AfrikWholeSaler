@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Package, Loader2 } from "lucide-react";
+import { Search, Package, Loader2, Download } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
 import { updateOrderStatus } from "@/app/actions/crud";
@@ -246,6 +246,14 @@ export function OrdersManager({ orders, customers }: OrdersManagerProps) {
                       <td className="px-4 py-3 text-right">
                         <div className="inline-flex items-center gap-2">
                           {savingId === order.id && <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />}
+                          <a
+                            href={`/api/invoices/${order.id}?download=1`}
+                            title={order.paymentStatus === "paid" ? t.tracking.staff.invoice : t.tracking.staff.proforma}
+                            aria-label={`${order.paymentStatus === "paid" ? t.tracking.staff.invoice : t.tracking.staff.proforma} — ${order.orderNumber}`}
+                            className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-border text-text-secondary hover:bg-surface-secondary hover:text-brand"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </a>
                           <select
                             value={statusOf(order)}
                             onChange={(e) => handleStatusChange(order, e.target.value as OrderStatus)}

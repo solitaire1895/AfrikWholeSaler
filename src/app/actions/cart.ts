@@ -4,7 +4,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { te } from "@/i18n/errors";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { sendOrderPlacedEmail } from "@/lib/email";
+import { sendOrderPlacedEmail, sendStaffOrderConfirmedAlert } from "@/lib/email";
 import { getLocale } from "@/i18n/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
@@ -49,13 +49,14 @@ export async function getCart(): Promise<CartLine[]> {
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];
+  const locale = await getLocale();
 
   return data
     .filter((row) => row.products && (row.products as unknown as ProductRow).is_active)
     .map((row) => ({
       productId: row.product_id,
       quantity: row.quantity,
-      product: mapProduct(row.products as unknown as ProductRow),
+      product: mapProduct(row.products as unknown as ProductRow, locale),
     }));
 }
 
@@ -275,6 +276,8 @@ export async function placeOrder(
   // Orders that go straight to payment are confirmed by the payment email instead.
   const placedId = order.id;
   if (paid || awaitingPrice) after(() => sendOrderPlacedEmail(placedId, { paidWithWallet: paid }));
+  // Paid in full with the wallet: confirmed already — alert the team.
+  if (paid) after(() => sendStaffOrderConfirmedAlert(placedId, { kind: "full" }));
 
   revalidatePath("/cart");
   revalidatePath("/dashboard/orders");
@@ -379,7 +382,7 @@ export async function confirmOrderPrice(orderId: string, totalAmount: number): P
     .update({
       total_amount: Math.round(totalAmount * 100) / 100,
       awaiting_price: false,
-      status: "confirmed",
+      // Stays "pending": the payment confirms it (and alerts the team).
       updated_at: new Date().toISOString(),
     })
     .eq("id", orderId);

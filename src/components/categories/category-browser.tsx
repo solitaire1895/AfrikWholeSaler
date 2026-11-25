@@ -1,5 +1,6 @@
 "use client";
 
+import { NotFoundChat } from "@/components/search/not-found-chat";
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -151,23 +152,7 @@ export function CategoryBrowser({
               </div>
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
-                <Package className="h-8 w-8 text-text-disabled" />
-              </div>
-              <h3 className="text-lg font-semibold text-navy mb-1">
-                {C.emptyTitle}
-              </h3>
-              <p className="text-text-secondary text-sm mb-4">
-                {C.emptyText}
-              </p>
-              <Link
-                href="/quote"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-[var(--radius-button)] bg-brand px-6 text-sm font-semibold text-white hover:bg-brand-hover transition-colors"
-              >
-                {C.requestQuote}
-              </Link>
-            </div>
+            <NotFoundChat className="my-12" />
           )}
 
           {/* Other Categories */}

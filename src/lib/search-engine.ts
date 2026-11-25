@@ -15,6 +15,7 @@ export interface SearchIndexProduct {
   img: string | null;
   p: number; // starting price (USD)
   r: number; // rating, used as a tie-breaker
+  tn?: Record<string, string>; // translated names by language
 }
 
 export interface SearchIndex {
@@ -353,6 +354,13 @@ function mergeRanges(ranges: [number, number][]) {
 const STORAGE_KEY = "aw-search-index-v1";
 const STORAGE_TTL = 5 * 60 * 1000;
 let enginePromise: Promise<SearchEngine> | null = null;
+let engineLang: string | undefined;
+
+/** Names in the visitor's language, so suggestions match what product pages show. */
+function inLanguage(index: SearchIndex, lang?: string): SearchIndex {
+  if (!lang) return index;
+  return { ...index, products: index.products.map((p) => (p.tn?.[lang] ? { ...p, n: p.tn[lang] } : p)) };
+}
 
 function readStored(): SearchIndex | null {
   try {
@@ -365,12 +373,13 @@ function readStored(): SearchIndex | null {
   }
 }
 
-export function loadSearchEngine(): Promise<SearchEngine> {
-  if (enginePromise) return enginePromise;
+export function loadSearchEngine(lang?: string): Promise<SearchEngine> {
+  if (enginePromise && engineLang === lang) return enginePromise;
+  engineLang = lang;
 
   const stored = typeof window !== "undefined" ? readStored() : null;
   if (stored) {
-    enginePromise = Promise.resolve(new SearchEngine(stored));
+    enginePromise = Promise.resolve(new SearchEngine(inLanguage(stored, lang)));
     return enginePromise;
   }
 
@@ -385,7 +394,7 @@ export function loadSearchEngine(): Promise<SearchEngine> {
       } catch {
         // Storage full or blocked — the in-memory engine still works.
       }
-      return new SearchEngine(index);
+      return new SearchEngine(inLanguage(index, lang));
     })
     .catch((err) => {
       enginePromise = null; // allow a retry on next focus

@@ -51,6 +51,8 @@ export interface Product {
   featured: boolean;
   rating: number;
   reviewCount: number;
+  /** Per-language name/description overrides (admin edits these). */
+  translations?: Partial<Record<"fr" | "en" | "es" | "zh", { name?: string; description?: string }>>;
 }
 
 // --- Categories ---

@@ -7,7 +7,7 @@ import { getT } from "@/i18n/server";
 import { categoryName } from "@/i18n/names";
 
 export default async function AdminInventoryPage() {
-  const products = await getProducts();
+  const products = await getProducts({ localized: false });
   const t = await getT();
   const I = t.adminCatalog.inventory;
   const stock = t.catalog.stock as Record<string, string>;

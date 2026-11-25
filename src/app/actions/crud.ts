@@ -3,6 +3,7 @@
 import { rateLimit } from "@/lib/rate-limit";
 import { detectImage, detectVideo } from "@/lib/file-signature";
 import { slugify } from "@/lib/slug";
+import { cleanTranslations } from "@/lib/product-i18n";
 import { IMPORT_MAX_ROWS, type ImportRow } from "@/lib/product-import";
 
 /** URL-safe product slug, made unique ("men-hoodie", "men-hoodie-2"…). */
@@ -20,6 +21,8 @@ async function uniqueProductSlug(
 import { te } from "@/i18n/errors";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { indexProductPhotos } from "@/lib/visual-search";
 
 // ========================================================
 // Server Actions — AfrikWholesaler CRUD
@@ -339,6 +342,7 @@ export async function createProduct(input: {
   importTaxRate?: number;
   deliveryDaysMin?: number;
   deliveryDaysMax?: number;
+  translations?: unknown;
 }): Promise<ActionResult> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -374,6 +378,7 @@ export async function createProduct(input: {
       stock_status: input.stockStatus,
       stock_quantity: input.stockQuantity,
       video_url: input.videoUrl || null,
+      translations: cleanTranslations(input.translations),
       badges: input.badges,
       specs: input.specs,
       featured: input.featured,
@@ -388,6 +393,8 @@ export async function createProduct(input: {
 
   if (error) return { success: false, error: error.message };
 
+  // Camera search: embed the new main photo once the response is sent.
+  if (data?.id) after(() => indexProductPhotos({ ids: [data.id] }).catch(() => {}));
   revalidatePath("/admin/products");
   revalidatePath("/products");
   return { success: true, data };
@@ -485,6 +492,7 @@ export async function updateProduct(productId: string, input: Record<string, unk
   if (input.name !== undefined) updateData.name = input.name;
   if (input.slug !== undefined) updateData.slug = await uniqueProductSlug(supabase, String(input.slug || input.name || ""), productId);
   if (input.description !== undefined) updateData.description = input.description;
+  if (input.translations !== undefined) updateData.translations = cleanTranslations(input.translations);
   if (input.category !== undefined) updateData.category = input.category;
   if (input.categorySlug !== undefined) updateData.category_slug = input.categorySlug;
   if (input.categoryId !== undefined) updateData.category_id = input.categoryId;
@@ -517,6 +525,8 @@ export async function updateProduct(productId: string, input: Record<string, unk
 
   if (error) return { success: false, error: error.message };
 
+  // Camera search: embed the new main photo once the response is sent.
+  if (data?.id) after(() => indexProductPhotos({ ids: [data.id] }).catch(() => {}));
   revalidatePath("/admin/products");
   revalidatePath("/products");
   return { success: true, data };
@@ -1509,5 +1519,56 @@ export async function deleteProductImage(filePath: string): Promise<ActionResult
 
   if (error) return { success: false, error: error.message };
 
+  return { success: true };
+}
+
+export type BulkProductAction =
+  | { kind: "feature"; value: boolean }
+  | { kind: "stock"; value: "In Stock" | "Low Stock" | "Out of Stock" | "Pre-Order" }
+  | { kind: "category"; categoryId: string }
+  | { kind: "hide" };
+
+/** Admin: applies one action to many products at once. */
+export async function bulkUpdateProducts(productIds: string[], action: BulkProductAction): Promise<ActionResult> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: await te("Unauthorized") };
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (!profile || !["admin", "super_admin"].includes(profile.role)) {
+    return { success: false, error: await te("Only admins can update products.") };
+  }
+
+  const ids = [...new Set(productIds)].filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, 500);
+  if (ids.length === 0) return { success: true };
+
+  let update: Record<string, unknown>;
+  switch (action.kind) {
+    case "feature":
+      update = { featured: Boolean(action.value) };
+      break;
+    case "stock":
+      if (!["In Stock", "Low Stock", "Out of Stock", "Pre-Order"].includes(action.value)) return { success: false, error: "Invalid stock status" };
+      update = { stock_status: action.value };
+      break;
+    case "category": {
+      const { data: cat } = await supabase.from("categories").select("id, name, slug").eq("id", action.categoryId).maybeSingle();
+      if (!cat) return { success: false, error: "Unknown category" };
+      // Sub-categories belong to the old category: cleared.
+      update = { category_id: cat.id, category: cat.name, category_slug: cat.slug, sub_category: null, sub_category_slug: null, sub_category_id: null };
+      break;
+    }
+    case "hide":
+      update = { is_active: false };
+      break;
+    default:
+      return { success: false, error: "Unknown action" };
+  }
+
+  const { error } = await supabase.from("products").update(update).in("id", ids);
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
   return { success: true };
 }

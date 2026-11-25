@@ -1,7 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCheckoutSessionStatus, type SaspayWebhookEvent } from "@/lib/saspay";
-import { sendPaymentReceivedEmail } from "@/lib/email";
+import { sendPaymentReceivedEmail, sendStaffOrderConfirmedAlert } from "@/lib/email";
 
 interface PaymentRow {
   id: string;
@@ -46,10 +46,9 @@ export async function syncPayment(payment: PaymentRow, event?: SaspayWebhookEven
       // Receipt only when this sync applied the payment, so webhook retries and
       // the return-page check never send it twice.
       if (result?.applied) {
-        await sendPaymentReceivedEmail(payment.order_id, paidNow, {
-          kind: result.kind === "deposit" ? "deposit" : "full",
-          balanceDue: Number(result.balance_due ?? 0),
-        });
+        const kind = result.kind === "deposit" ? "deposit" : "full";
+        await sendPaymentReceivedEmail(payment.order_id, paidNow, { kind, balanceDue: Number(result.balance_due ?? 0) });
+        await confirmPaidOrder(payment.order_id, { kind, paid: paidNow });
       }
     } else {
       // supabase/deposits.sql not run yet: previous behavior (one payment = paid).
@@ -59,7 +58,10 @@ export async function syncPayment(payment: PaymentRow, event?: SaspayWebhookEven
         .eq("id", payment.order_id)
         .neq("payment_status", "paid")
         .select("id");
-      if (newlyPaid?.length) await sendPaymentReceivedEmail(payment.order_id, paidNow);
+      if (newlyPaid?.length) {
+        await sendPaymentReceivedEmail(payment.order_id, paidNow);
+        await confirmPaidOrder(payment.order_id, { kind: "full", paid: paidNow });
+      }
     }
   } else if (status === "FAILED") {
     // Only mark the order failed if no other attempt for it has succeeded.
@@ -71,6 +73,24 @@ export async function syncPayment(payment: PaymentRow, event?: SaspayWebhookEven
   }
 
   return status;
+}
+
+/**
+ * A payment (full, or the 30% deposit) moves a pending order to "confirmed"
+ * automatically, and the team is alerted by email and SMS. The conditional
+ * update makes it happen once, even if the webhook is delivered again.
+ */
+export async function confirmPaidOrder(
+  orderId: string,
+  opts: { kind?: "full" | "deposit"; paid?: { amount: string | number; currency: string } } = {}
+) {
+  const { data: confirmed } = await createAdminClient()
+    .from("orders")
+    .update({ status: "confirmed", updated_at: new Date().toISOString() })
+    .eq("id", orderId)
+    .eq("status", "pending")
+    .select("id");
+  if (confirmed?.length) await sendStaffOrderConfirmedAlert(orderId, opts);
 }
 
 /**

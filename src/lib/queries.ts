@@ -1,4 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
+import { getLocale } from "@/i18n/server";
+import type { Locale } from "@/i18n/config";
+import { cleanTranslations, localizedText } from "@/lib/product-i18n";
 import type {
   Category,
   Conversation,
@@ -44,9 +47,11 @@ export interface ProductRow {
   rating: number;
   review_count: number;
   is_active: boolean;
+  translations?: unknown;
 }
 
-export function mapProduct(row: ProductRow): Product {
+/** `locale` swaps in that language's name/description; omit it for the default text (admin). */
+export function mapProduct(row: ProductRow, locale?: Locale): Product {
   const images = row.images && row.images.length > 0
     ? row.images
     : row.image_url
@@ -60,8 +65,7 @@ export function mapProduct(row: ProductRow): Product {
   return {
     id: row.id,
     slug: row.slug,
-    name: row.name,
-    description: row.description,
+    ...localizedText(row, row.translations, locale),
     category: row.category,
     categorySlug: row.category_slug,
     subCategory: row.sub_category || null,
@@ -80,7 +84,14 @@ export function mapProduct(row: ProductRow): Product {
     featured: row.featured,
     rating: Number(row.rating),
     reviewCount: row.review_count,
+    translations: cleanTranslations(row.translations),
   };
+}
+
+/** Shop product lists are shown in the visitor's language; admin gets the default text. */
+async function mapAll(rows: ProductRow[], localized = true) {
+  const locale = localized ? await getLocale() : undefined;
+  return rows.map((r) => mapProduct(r, locale));
 }
 
 interface CategoryRow {
@@ -361,7 +372,7 @@ function mapMessage(row: MessageRow): Message {
 
 // --- Products ---
 
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts({ localized = true } = {}): Promise<Product[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("products")
@@ -370,7 +381,7 @@ export async function getProducts(): Promise<Product[]> {
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
-  return (data as ProductRow[]).map(mapProduct);
+  return mapAll(data as ProductRow[], localized);
 }
 
 export async function getFeaturedProducts(limit = 8): Promise<Product[]> {
@@ -384,7 +395,7 @@ export async function getFeaturedProducts(limit = 8): Promise<Product[]> {
     .limit(limit);
 
   if (error || !data) return [];
-  return (data as ProductRow[]).map(mapProduct);
+  return mapAll(data as ProductRow[]);
 }
 
 export async function getProductBySlug(slug: string): Promise<Product | null> {
@@ -397,11 +408,11 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     .single();
 
   if (error || !data) return null;
-  return mapProduct(data as ProductRow);
+  return mapProduct(data as ProductRow, await getLocale());
 }
 
 /** Admin: products imported from a CSV that still need photos (hidden from the shop). */
-export async function getDraftProducts(): Promise<Product[]> {
+export async function getDraftProducts({ localized = true } = {}): Promise<Product[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("products")
@@ -412,7 +423,7 @@ export async function getDraftProducts(): Promise<Product[]> {
     .limit(500);
 
   if (error || !data) return [];
-  return (data as ProductRow[]).map(mapProduct);
+  return mapAll(data as ProductRow[], localized);
 }
 
 export async function getProductsByCategory(categorySlug: string): Promise<Product[]> {
@@ -425,7 +436,7 @@ export async function getProductsByCategory(categorySlug: string): Promise<Produ
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
-  return (data as ProductRow[]).map(mapProduct);
+  return mapAll(data as ProductRow[]);
 }
 
 export async function getProductsBySubCategory(subCategorySlug: string): Promise<Product[]> {
@@ -438,7 +449,7 @@ export async function getProductsBySubCategory(subCategorySlug: string): Promise
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
-  return (data as ProductRow[]).map(mapProduct);
+  return mapAll(data as ProductRow[]);
 }
 
 // --- Categories ---
@@ -1068,7 +1079,7 @@ export async function getRelatedProducts(product: Product, limit = 4): Promise<P
     .limit(limit);
 
   if (error || !data) return [];
-  return (data as ProductRow[]).map(mapProduct);
+  return mapAll(data as ProductRow[]);
 }
 
 // --- Purchase Requests ---

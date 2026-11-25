@@ -21,6 +21,7 @@ import {
   ImagePlus,
 } from "lucide-react";
 import { ProductImport } from "@/components/admin/product-import";
+import { PhotoIndexButton, TranslationFields, readTranslations } from "@/components/admin/product-translations";
 import { Card } from "@/components/ui/card";
 import { formatPrice, cn } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
@@ -29,6 +30,8 @@ import {
   updateProduct,
   deleteProduct,
   deleteProductVideo,
+  bulkUpdateProducts,
+  type BulkProductAction,
 } from "@/app/actions/crud";
 import type { Product, Category, SubCategory, PriceTier } from "@/types";
 import { uploadProductImage, uploadProductVideoFile, type MediaResult } from "@/lib/product-media";
@@ -57,6 +60,9 @@ export function ProductsManager({
   const router = useRouter();
   const [confirmingDelete, setConfirmingDelete] = useState<Product | null>(null);
   const [showImport, setShowImport] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkChoice, setBulkChoice] = useState("");
+  const B = t.ops.bulk;
   const [notice, setNotice] = useState<string | null>(null);
   const isDraft = (p: Product | null) => !!p && drafts.some((d) => d.id === p.id);
   const stock = t.catalog.stock as Record<string, string>;
@@ -151,6 +157,57 @@ export function ProductsManager({
     setPriceTiers([{ minQuantity: 1, maxQuantity: null, price: 0, currency: "USD" }]);
     setSelectedCategoryId("");
     setSelectedSubCategorySlug("");
+  }
+
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  /** "feature:1", "stock:Low Stock", "category:<id>", "hide" → the server action. */
+  function applyBulk() {
+    const ids = [...selected];
+    if (!bulkChoice || ids.length === 0) return;
+    const [kind, ...rest] = bulkChoice.split(":");
+    const value = rest.join(":");
+    const action: BulkProductAction =
+      kind === "feature"
+        ? { kind: "feature", value: value === "1" }
+        : kind === "stock"
+          ? { kind: "stock", value: value as Product["stockStatus"] }
+          : kind === "category"
+            ? { kind: "category", categoryId: value }
+            : { kind: "hide" };
+    if (action.kind === "hide" && !window.confirm(format(B.confirmHide, { n: ids.length }))) return;
+    startTransition(async () => {
+      const result = await bulkUpdateProducts(ids, action);
+      if (!result.success) {
+        setError(result.error || C.failed);
+        return;
+      }
+      const cat = action.kind === "category" ? categories.find((c) => c.id === action.categoryId) : null;
+      setProducts((prev) =>
+        action.kind === "hide"
+          ? prev.filter((p) => !selected.has(p.id))
+          : prev.map((p) =>
+              !selected.has(p.id)
+                ? p
+                : action.kind === "feature"
+                  ? { ...p, featured: action.value }
+                  : action.kind === "stock"
+                    ? { ...p, stockStatus: action.value }
+                    : cat
+                      ? { ...p, category: cat.name, categorySlug: cat.slug, subCategory: null, subCategorySlug: null }
+                      : p
+            )
+      );
+      setNotice(format(B.done, { n: ids.length }));
+      setSelected(new Set());
+      setBulkChoice("");
+    });
   }
 
   function handleDelete(productId: string) {
@@ -327,6 +384,7 @@ export function ProductsManager({
         name: formData.get("name") as string,
         slug: slugify((formData.get("slug") as string) || (formData.get("name") as string)),
         description: formData.get("description") as string,
+        translations: readTranslations(formData),
         category: categoryName,
         categorySlug: categoryObj?.slug || "",
         categoryId: categoryObj?.id,
@@ -364,6 +422,7 @@ export function ProductsManager({
                     name: input.name,
                     slug: input.slug,
                     description: input.description,
+                    translations: input.translations,
                     category: input.category,
                     categorySlug: input.categorySlug,
                     subCategory: input.subCategory,
@@ -412,7 +471,8 @@ export function ProductsManager({
             {P.lead}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <PhotoIndexButton />
           <button
             onClick={() => setShowImport(true)}
             className="flex h-10 items-center gap-2 rounded-[var(--radius-button)] border border-border px-4 text-sm font-semibold text-navy hover:bg-surface-secondary transition-colors"
@@ -515,11 +575,53 @@ export function ProductsManager({
         </select>
       </div>
 
+      {selected.size > 0 && (
+        <div className="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-[var(--radius-lg)] border border-brand/30 bg-brand-light/60 px-4 py-3 backdrop-blur">
+          <span className="text-sm font-semibold text-navy">{format(B.selected, { n: selected.size })}</span>
+          <select
+            value={bulkChoice}
+            onChange={(e) => setBulkChoice(e.target.value)}
+            aria-label={B.action}
+            className="h-9 min-w-0 flex-1 rounded-[var(--radius-input)] border border-border bg-surface px-3 text-sm sm:flex-none"
+          >
+            <option value="">{B.action}</option>
+            <option value="feature:1">{B.feature}</option>
+            <option value="feature:0">{B.unfeature}</option>
+            {(["In Stock", "Low Stock", "Out of Stock", "Pre-Order"] as const).map((st) => (
+              <option key={st} value={`stock:${st}`}>{format(B.stockTo, { status: stock[st] ?? st })}</option>
+            ))}
+            {categories.map((c) => (
+              <option key={c.id} value={`category:${c.id}`}>{format(B.moveTo, { category: categoryName(t, c.slug, c.name) })}</option>
+            ))}
+            <option value="hide">{B.hide}</option>
+          </select>
+          <button
+            onClick={applyBulk}
+            disabled={!bulkChoice || isPending}
+            className="h-9 rounded-[var(--radius-button)] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-hover disabled:opacity-50"
+          >
+            {B.apply}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="ml-auto text-sm font-medium text-text-secondary hover:text-navy">
+            {B.clear}
+          </button>
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-border bg-surface-secondary/50">
+                <th className="w-10 pl-4 py-3">
+                  <input
+                    type="checkbox"
+                    aria-label={B.selectAll}
+                    checked={filteredProducts.length > 0 && filteredProducts.every((p) => selected.has(p.id))}
+                    onChange={(e) => setSelected(e.target.checked ? new Set(filteredProducts.map((p) => p.id)) : new Set())}
+                    className="h-4 w-4 cursor-pointer accent-[var(--color-brand)]"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">{P.colProduct}</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide hidden sm:table-cell">{P.colCategory}</th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-secondary uppercase tracking-wide">{P.colPrice}</th>
@@ -531,7 +633,16 @@ export function ProductsManager({
             <tbody className="divide-y divide-border">
               {filteredProducts.length > 0 ? (
                 filteredProducts.map((product) => (
-                  <tr key={product.id} className="hover:bg-surface-secondary/30 transition-colors">
+                  <tr key={product.id} className={cn("hover:bg-surface-secondary/30 transition-colors", selected.has(product.id) && "bg-brand-light/30")}>
+                    <td className="w-10 pl-4 py-3">
+                      <input
+                        type="checkbox"
+                        aria-label={format(B.select, { name: product.name })}
+                        checked={selected.has(product.id)}
+                        onChange={() => toggleSelected(product.id)}
+                        className="h-4 w-4 cursor-pointer accent-[var(--color-brand)]"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[var(--radius-sm)] bg-surface-secondary">
@@ -601,7 +712,7 @@ export function ProductsManager({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center">
+                  <td colSpan={7} className="px-4 py-12 text-center">
                     <Package className="h-10 w-10 text-text-disabled mx-auto mb-3" />
                     <p className="text-sm text-text-secondary">{P.none}</p>
                   </td>
@@ -717,6 +828,8 @@ export function ProductsManager({
                   className="w-full rounded-[var(--radius-input)] border border-border bg-surface px-4 py-2 text-sm focus:border-brand focus:outline-none"
                 />
               </div>
+
+              <TranslationFields product={editingProduct} />
 
               {/* Category & Sub-Category */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

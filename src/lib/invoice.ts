@@ -119,7 +119,8 @@ export interface InvoiceData {
   amountPaid?: number;
   customer: { name: string; company?: string | null; email?: string | null; phone?: string | null };
   shipTo: { name?: string; address?: string; city?: string; country?: string; phone?: string } | null;
-  items: { name: string; quantity: number; unitPrice: number; total: number }[];
+  /** image: JPEG thumbnail bytes of the product photo (optional). */
+  items: { name: string; quantity: number; unitPrice: number; total: number; image?: Uint8Array | null }[];
 }
 
 const NAVY = rgb(15 / 255, 23 / 255, 42 / 255);
@@ -262,7 +263,9 @@ export async function buildInvoicePdf(data: InvoiceData, locale: Locale | string
   y = Math.min(endA, endB, endC) - 18;
 
   // ---- Items table
-  const cols = { desc: M + 10, qty: W - M - 210, unit: W - M - 100, amount: W - M - 10 };
+  const THUMB = 38;
+  const withImages = data.items.some((i) => i.image);
+  const cols = { img: M + 8, desc: M + 10 + (withImages ? THUMB + 10 : 0), qty: W - M - 210, unit: W - M - 100, amount: W - M - 10 };
   const header = () => {
     page.drawRectangle({ x: M, y: y - 8, width: W - 2 * M, height: 24, color: CREAM });
     text(t.description, cols.desc, y, { font: bold, size: 9 });
@@ -282,13 +285,24 @@ export async function buildInvoicePdf(data: InvoiceData, locale: Locale | string
   let subtotal = 0;
   for (const item of data.items) {
     const lines = wrap(item.name, regular, 9.5, cols.qty - cols.desc - 40);
-    const rowH = Math.max(1, lines.length) * 13 + 10;
+    const rowH = Math.max(Math.max(1, lines.length) * 13 + 10, withImages ? THUMB + 10 : 0);
     if (y - rowH < 150) {
       footer();
       page = pdf.addPage([W, H]);
       pageNo++;
       y = H - M;
       header();
+    }
+    if (item.image) {
+      try {
+        const img = await pdf.embedJpg(item.image);
+        // Top of the photo lines up with the first text line.
+        page.drawImage(img, { x: cols.img, y: y + 9 - THUMB, width: THUMB, height: THUMB });
+      } catch {
+        // unreadable photo: the row still prints
+      }
+    } else if (withImages) {
+      page.drawRectangle({ x: cols.img, y: y + 9 - THUMB, width: THUMB, height: THUMB, color: CREAM });
     }
     lines.forEach((l, i) => text(l, cols.desc, y - i * 13, { size: 9.5 }));
     right(String(item.quantity), cols.qty, y, { size: 9.5 });

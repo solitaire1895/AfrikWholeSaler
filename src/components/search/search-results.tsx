@@ -1,8 +1,10 @@
 "use client";
 
+import { NotFoundChat } from "@/components/search/not-found-chat";
+import { localizedText } from "@/lib/product-i18n";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, SlidersHorizontal, Package, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Search, SlidersHorizontal, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { ProductCard } from "@/components/product/product-card";
 import { cn } from "@/lib/utils";
 import type { Product, Category } from "@/types";
@@ -41,7 +43,7 @@ export function SearchResults({
   categories,
 }: SearchResultsProps) {
   const router = useRouter();
-  const { t, format } = useI18n();
+  const { t, format, locale } = useI18n();
   const S = t.catalog.search;
   const sortOptions = [
     { value: "relevance", label: S.sortRelevance },
@@ -118,8 +120,7 @@ export function SearchResults({
   const mappedProducts: Product[] = (products as unknown as Record<string, unknown>[]).map((p) => ({
     id: p.id as string,
     slug: p.slug as string,
-    name: p.name as string,
-    description: p.description as string,
+    ...localizedText({ name: p.name as string, description: p.description as string }, p.translations, locale),
     category: p.category as string,
     categorySlug: p.category_slug as string,
     subCategory: (p.sub_category as string) || null,
@@ -305,16 +306,13 @@ export function SearchResults({
               )}
             </>
           ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
-                <Package className="h-8 w-8 text-text-disabled" />
-              </div>
-              <h3 className="text-lg font-semibold text-navy mb-1">{S.emptyTitle}</h3>
-              <p className="text-text-secondary text-sm mb-4">
+            <div className="py-12">
+              <p className="mb-6 text-center text-sm text-text-secondary">
                 {initialQuery
                   ? format(S.emptyQuery, { q: initialQuery })
                   : S.emptyNoQuery}
               </p>
+              <NotFoundChat />
             </div>
           )}
         </div>

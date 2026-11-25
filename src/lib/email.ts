@@ -268,3 +268,77 @@ export async function sendShipmentEmail(
     layout(t, o.locale, body, { label: t.common.trackOrder, href: orderLink(o.id) })
   );
 }
+
+// --------------------------------------------------------
+// Staff alerts
+// --------------------------------------------------------
+
+/** Roles alerted when an order is confirmed (override with STAFF_ALERT_ROLES=admin,sales_rep,…). */
+const STAFF_ALERT_ROLES = (process.env.STAFF_ALERT_ROLES || "admin,super_admin,operations_manager,sales_rep")
+  .split(",")
+  .map((r) => r.trim())
+  .filter(Boolean);
+
+/**
+ * Email + SMS to the team when an order becomes confirmed (paid, or deposit
+ * paid). Each staff member gets it in their own language. Extra recipients:
+ * STAFF_ALERT_EMAILS and STAFF_ALERT_PHONES (comma-separated).
+ * Call it once per confirmation — callers guard on the pending → confirmed change.
+ */
+export async function sendStaffOrderConfirmedAlert(
+  orderId: string,
+  opts: { kind?: "full" | "deposit"; paid?: { amount: string | number; currency: string } } = {}
+) {
+  const o = await loadOrder(orderId);
+  if (!o) return;
+  const admin = createAdminClient();
+  const [{ data: staff }, { data: order }] = await Promise.all([
+    admin.from("profiles").select("*").in("role", STAFF_ALERT_ROLES),
+    admin.from("orders").select("customer_id, customers(company_name, contact_name)").eq("id", orderId).maybeSingle(),
+  ]);
+  const cust = (order?.customers ?? null) as { company_name?: string | null; contact_name?: string | null } | null;
+  const customer = [cust?.contact_name, cust?.company_name].filter(Boolean).join(" · ") || o.to;
+  const link = `${SITE_URL}/admin/orders/${o.id}`;
+
+  type Recipient = { email?: string | null; phone?: string | null; locale: Locale };
+  const recipients: Recipient[] = ((staff ?? []) as { email?: string; phone?: string; locale?: string; is_active?: boolean }[])
+    .filter((s) => s.is_active !== false)
+    .map((s) => ({ email: s.email, phone: s.phone, locale: isLocale(s.locale) ? s.locale : defaultLocale }));
+  const list = (v?: string) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  for (const email of list(process.env.STAFF_ALERT_EMAILS)) recipients.push({ email, locale: defaultLocale });
+  for (const phone of list(process.env.STAFF_ALERT_PHONES)) recipients.push({ phone, locale: defaultLocale });
+
+  const { ops } = await import("@/i18n/messages/ops");
+  const { sendSms } = await import("@/lib/sms");
+  const seenEmail = new Set<string>();
+  const seenPhone = new Set<string>();
+
+  await Promise.all(
+    recipients.map(async (r) => {
+      const S = ops[r.locale].staffAlert;
+      const t = emailMessages[r.locale];
+      const amount = opts.paid
+        ? money(Number(opts.paid.amount), opts.paid.currency, r.locale)
+        : money(o.total, o.currency, r.locale);
+      const vars = { order: o.orderNumber, amount, customer, link };
+      const jobs: Promise<unknown>[] = [];
+      const email = r.email?.toLowerCase();
+      if (email && !seenEmail.has(email)) {
+        seenEmail.add(email);
+        const body =
+          heading(S.title, "", format(S.intro, vars)) +
+          `<tr><td style="padding:16px 32px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.cream};border-radius:14px"><tr>
+<td style="padding:16px 20px;font-size:14px;color:${C.muted}">${esc(S.paid)}</td>
+<td style="padding:16px 20px;font-size:20px;font-weight:700;color:${C.navy};text-align:right">${esc(amount)}</td></tr></table></td></tr>` +
+          (opts.kind === "deposit" ? paragraph(S.deposit, `color:${C.brand};font-weight:600`) : "") +
+          itemsTable({ ...o, locale: r.locale }, t);
+        jobs.push(sendEmail(email, format(S.subject, vars), layout(t, r.locale, body, { label: S.open, href: link })));
+      }
+      if (r.phone && !seenPhone.has(r.phone)) {
+        seenPhone.add(r.phone);
+        jobs.push(sendSms(r.phone, format(S.sms, vars)));
+      }
+      await Promise.all(jobs);
+    })
+  );
+}

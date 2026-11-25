@@ -23,6 +23,7 @@ import {
   PasswordStrength,
 } from "@/components/ui/auth-helpers";
 import { createClient } from "@/lib/supabase/client";
+import { TermsDialog, TERMS_VERSION } from "@/components/legal/terms-dialog";
 import { useI18n } from "@/i18n/client";
 import { intlLocale } from "@/i18n/config";
 import { authErrorMessage } from "@/i18n/auth-errors";
@@ -62,6 +63,7 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [termsDialog, setTermsDialog] = useState<"terms" | "privacy" | null>(null);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     firstName: "",
@@ -111,6 +113,9 @@ export default function RegisterPage() {
               company: formData.company,
               phone: formData.phone,
               country: formData.country,
+              // Proof of consent: which terms were accepted, and when.
+              terms_accepted_at: new Date().toISOString(),
+              terms_version: TERMS_VERSION,
             },
           },
         });
@@ -312,20 +317,48 @@ export default function RegisterPage() {
           <Checkbox
             id="terms"
             checked={agreeToTerms}
-            onChange={setAgreeToTerms}
+            // Ticking the box first shows the documents; they are accepted from there.
+            onChange={(checked) => (checked ? setTermsDialog("terms") : setAgreeToTerms(false))}
             label={
               <>
                 {R.agreeBefore}{" "}
-                <Link href="/terms" className="font-medium text-brand hover:text-brand-hover">
+                <Link
+                  href="/terms"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTermsDialog("terms");
+                  }}
+                  className="font-medium text-brand hover:text-brand-hover"
+                >
                   {R.terms}
                 </Link>{" "}
                 {R.agreeAnd}{" "}
-                <Link href="/privacy" className="font-medium text-brand hover:text-brand-hover">
+                <Link
+                  href="/privacy"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setTermsDialog("privacy");
+                  }}
+                  className="font-medium text-brand hover:text-brand-hover"
+                >
                   {R.privacy}
                 </Link>
               </>
             }
           />
+          {termsDialog && (
+            <TermsDialog
+              initial={termsDialog}
+              onClose={() => setTermsDialog(null)}
+              onAccept={() => {
+                setAgreeToTerms(true);
+                setTermsDialog(null);
+                setErrors((prev) => ({ ...prev, terms: "" }));
+              }}
+            />
+          )}
           {errors.terms && (
             <p className="mt-1.5 text-xs text-error font-medium ml-7">
               {errors.terms}

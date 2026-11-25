@@ -78,6 +78,57 @@ function PayButton({ failed, label, secondary }: { failed?: boolean; label?: str
   );
 }
 
+const needsPayment = (o: Order) => o.status !== "Cancelled" && o.paymentStatus !== "paid";
+
+/** Pay now / deposit / balance buttons for an unpaid order. */
+function PaymentActions({ order }: { order: Order }) {
+  const { t, format } = useI18n();
+  const O = t.account.orders;
+  if (order.awaitingPrice) {
+    return (
+      <span
+        title={O.awaitingPriceHint}
+        className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-gold-light px-4 text-xs font-semibold text-navy"
+      >
+        <Clock className="h-3.5 w-3.5 text-gold" />
+        {O.awaitingPrice}
+      </span>
+    );
+  }
+  if (canPayDeposit(order)) {
+    // Big order: 30% now, or everything at once.
+    return (
+      <>
+        <form action={payOrder.bind(null, order.id, "deposit")}>
+          <PayButton label={format(O.payDeposit, { amount: formatPrice(depositAmount(order), order.currency) })} />
+        </form>
+        <form action={payOrder.bind(null, order.id, "full")}>
+          <PayButton secondary label={O.payFull} />
+        </form>
+      </>
+    );
+  }
+  if ((order.amountPaid ?? 0) > 0) {
+    // Deposit paid: the balance is due before shipping.
+    return (
+      <>
+        <span className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-success/10 px-4 text-xs font-semibold text-success">
+          <CreditCard className="h-3.5 w-3.5" />
+          {O.depositPaid}
+        </span>
+        <form action={payOrder.bind(null, order.id, "full")}>
+          <PayButton label={format(O.payBalance, { amount: formatPrice(balanceDue(order), order.currency) })} />
+        </form>
+      </>
+    );
+  }
+  return (
+    <form action={payOrder.bind(null, order.id, "full")}>
+      <PayButton failed={order.paymentStatus === "failed"} />
+    </form>
+  );
+}
+
 export function OrdersList({
   orders,
   placed,
@@ -264,6 +315,21 @@ export function OrdersList({
                   )}
                 </button>
 
+                {/* Payment: always visible, never hidden inside the details */}
+                {needsPayment(order) && (
+                  <div className="flex flex-col gap-3 border-t border-border bg-brand-light/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm">
+                      <span className="text-text-secondary">{O.orderTotal} </span>
+                      <span className="font-bold text-navy">
+                        {order.awaitingPrice ? O.awaitingPrice : formatPrice(order.totalAmount, order.currency)}
+                      </span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <PaymentActions order={order} />
+                    </div>
+                  </div>
+                )}
+
                 {/* Order Details (expanded) */}
                 {isExpanded && (
                   <div className="border-t border-border p-4 space-y-4 bg-surface-secondary/30">
@@ -321,47 +387,11 @@ export function OrdersList({
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {order.paymentStatus === "paid" ? (
+                        {order.paymentStatus === "paid" && (
                           <span className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-success/10 px-4 text-xs font-semibold text-success">
                             <CreditCard className="h-3.5 w-3.5" />
                             {O.paid}
                           </span>
-                        ) : order.awaitingPrice ? (
-                          <span
-                            title={O.awaitingPriceHint}
-                            className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-gold-light px-4 text-xs font-semibold text-navy"
-                          >
-                            <Clock className="h-3.5 w-3.5 text-gold" />
-                            {O.awaitingPrice}
-                          </span>
-                        ) : (
-                          order.status !== "Cancelled" &&
-                          (canPayDeposit(order) ? (
-                            // Big order: 30% now, or everything at once.
-                            <>
-                              <form action={payOrder.bind(null, order.id, "deposit")}>
-                                <PayButton label={format(O.payDeposit, { amount: formatPrice(depositAmount(order), order.currency) })} />
-                              </form>
-                              <form action={payOrder.bind(null, order.id, "full")}>
-                                <PayButton secondary label={O.payFull} />
-                              </form>
-                            </>
-                          ) : (order.amountPaid ?? 0) > 0 ? (
-                            // Deposit paid: the balance is due before shipping.
-                            <>
-                              <span className="flex h-9 items-center gap-1.5 rounded-[var(--radius-button)] bg-success/10 px-4 text-xs font-semibold text-success">
-                                <CreditCard className="h-3.5 w-3.5" />
-                                {O.depositPaid}
-                              </span>
-                              <form action={payOrder.bind(null, order.id, "full")}>
-                                <PayButton label={format(O.payBalance, { amount: formatPrice(balanceDue(order), order.currency) })} />
-                              </form>
-                            </>
-                          ) : (
-                            <form action={payOrder.bind(null, order.id, "full")}>
-                              <PayButton failed={order.paymentStatus === "failed"} />
-                            </form>
-                          ))
                         )}
                         <a
                           href={`/api/invoices/${order.id}?download=1`}

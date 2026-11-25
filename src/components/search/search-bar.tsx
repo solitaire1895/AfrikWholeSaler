@@ -14,6 +14,7 @@ import Image from "next/image";
 import { Search, X, ArrowRight, Clock, TrendingUp, LayoutGrid, ArrowUpLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCurrency } from "@/lib/currency-context";
+import { CameraSearchButton } from "@/components/search/camera-search";
 import { useI18n } from "@/i18n/client";
 import { categoryName, subCategoryName } from "@/i18n/names";
 import {
@@ -116,7 +117,7 @@ export function SearchBar({
 }) {
   const router = useRouter();
   const { formatPrice } = useCurrency();
-  const { t, format } = useI18n();
+  const { t, format, locale } = useI18n();
   const S = t.shop.search;
   const listId = useId();
   const [query, setQuery] = useState("");
@@ -136,7 +137,7 @@ export function SearchBar({
 
   // --- Load the catalog index and popular searches early ---
   const warmUp = () => {
-    if (!engine) loadSearchEngine().then(setEngine).catch(() => {});
+    if (!engine) loadSearchEngine(locale).then(setEngine).catch(() => {});
     loadPopularSearches().then(setPopular);
   };
 
@@ -146,7 +147,7 @@ export function SearchBar({
       cancelIdleCallback?: (id: number) => void;
     };
     const start = () => {
-      loadSearchEngine().then(setEngine).catch(() => {});
+      loadSearchEngine(locale).then(setEngine).catch(() => {});
       loadPopularSearches().then(setPopular);
     };
     if (w.requestIdleCallback) {
@@ -155,7 +156,7 @@ export function SearchBar({
     }
     const t = setTimeout(start, 1500);
     return () => clearTimeout(t);
-  }, []);
+  }, [locale]);
 
   // --- "/" or Ctrl/Cmd+K focuses search from anywhere ---
   useEffect(() => {
@@ -428,26 +429,25 @@ export function SearchBar({
             }}
             onKeyDown={handleKeyDown}
             placeholder={S.placeholder}
-            className="h-10 w-full rounded-[inherit] bg-transparent pl-10 pr-16 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none [&::-webkit-search-cancel-button]:hidden"
+            className="h-10 w-full rounded-[inherit] bg-transparent pl-10 pr-20 text-sm text-text-primary placeholder:text-text-disabled focus:outline-none [&::-webkit-search-cancel-button]:hidden"
           />
-          {inputValue ? (
-            <button
-              type="button"
-              aria-label={S.clear}
-              onClick={() => {
-                setQuery("");
-                setActiveIndex(-1);
-                inputRef.current?.focus();
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-secondary"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          ) : (
-            <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-border px-1.5 text-[10px] font-medium text-text-disabled lg:block">
-              /
-            </kbd>
-          )}
+          <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+            {inputValue && (
+              <button
+                type="button"
+                aria-label={S.clear}
+                onClick={() => {
+                  setQuery("");
+                  setActiveIndex(-1);
+                  inputRef.current?.focus();
+                }}
+                className="flex h-8 w-8 items-center justify-center text-text-disabled hover:text-text-secondary"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+            <CameraSearchButton />
+          </div>
           {/* Thin progress line instead of a spinner, so suggestions never blink */}
           {serverLoading && (
             <span className="absolute inset-x-4 bottom-0 h-0.5 overflow-hidden rounded-full">

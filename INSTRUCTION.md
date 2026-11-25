@@ -190,6 +190,26 @@ The address in `EMAIL_FROM` must use the domain you verified. While the domain i
 | Order confirmation | Right after checkout | The language the customer shops in |
 | Payment receipt | When SasPay confirms the payment (sent once) | Customer's saved language |
 | Shipping update | When staff create the shipment, or post a tracking update marked "visible to the customer" | Customer's saved language |
+| **Staff alert** (email + SMS) | When an order is paid (in full or the 30% deposit) and switches automatically to **Confirmed** | Each staff member's saved language |
+
+#### Staff alerts: who receives them
+- Every staff account whose role is `admin`, `super_admin`, `operations_manager` or `sales_rep`, at the email and phone number of their profile (phone in international format, e.g. `+237699001122`). Change the roles with `STAFF_ALERT_ROLES=admin,super_admin,logistics_staff`.
+- Extra recipients (comma-separated): `STAFF_ALERT_EMAILS=boss@example.com` and `STAFF_ALERT_PHONES=+237699001122,+8613800000000`.
+
+#### SMS provider (choose one)
+Without these variables, alerts go by email only.
+```
+# Twilio (worldwide)
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=xxxxxxxxxxxxxxxx
+TWILIO_FROM=+15551234567
+
+# or Africa's Talking (cheaper in many African countries)
+AT_USERNAME=your_username
+AT_API_KEY=xxxxxxxxxxxxxxxx
+AT_SENDER_ID=AfrikWS        # optional, must be approved by Africa's Talking
+```
+If both are set, add `SMS_PROVIDER=twilio` or `SMS_PROVIDER=africastalking`.
 
 Run `supabase/emails.sql` once (it adds the `locale` column used to remember each customer's language). Without it, emails are sent in French.
 

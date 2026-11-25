@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { buildInvoicePdf, invoiceNumber } from "@/lib/invoice";
+import { invoiceThumbnail } from "@/lib/invoice-images";
 import { getLocale } from "@/i18n/server";
 import { isLocale } from "@/i18n/config";
 
@@ -19,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
 
   const { data: order } = await supabase
     .from("orders")
-    .select("*, order_items(product_name, quantity, unit_price, total_price)")
+    .select("*, order_items(product_name, quantity, unit_price, total_price, image_url)")
     .eq("id", orderId)
     .maybeSingle();
   if (!order) return new Response("Not found", { status: 404 });
@@ -49,6 +50,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
   const langParam = url.searchParams.get("lang");
   const locale = isLocale(langParam) ? langParam : await getLocale();
 
+  type ItemRow = { product_name: string; quantity: number; unit_price: number; total_price: number; image_url: string | null };
+  const itemRows = (order.order_items ?? []) as ItemRow[];
+  // Product photos, fetched in parallel (each gives up after a few seconds).
+  const thumbs = await Promise.all(itemRows.map((i) => invoiceThumbnail(i.image_url)));
+
   const pdf = await buildInvoicePdf(
     {
       orderNumber: order.order_number,
@@ -67,9 +73,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ orde
         phone: ship?.phone || customer?.phone,
       },
       shipTo: ship ? { name: ship.fullName, address: ship.address, city: ship.city, country: ship.country, phone: ship.phone } : null,
-      items: ((order.order_items ?? []) as { product_name: string; quantity: number; unit_price: number; total_price: number }[]).map(
-        (i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: Number(i.unit_price), total: Number(i.total_price) })
-      ),
+      items: itemRows.map((i, idx) => ({
+        name: i.product_name,
+        quantity: i.quantity,
+        unitPrice: Number(i.unit_price),
+        total: Number(i.total_price),
+        image: thumbs[idx],
+      })),
     },
     locale
   );

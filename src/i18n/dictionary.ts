@@ -17,6 +17,8 @@ import { admin } from "./messages/admin";
 import { adminCatalog } from "./messages/admin-catalog";
 import { legal } from "./messages/legal";
 import { tracking } from "./messages/tracking";
+import { discovery } from "./messages/discovery";
+import { ops } from "./messages/ops";
 
 // Each namespace holds one area's texts in all four languages.
 const namespaces = {
@@ -38,6 +40,8 @@ const namespaces = {
   adminCatalog,
   legal,
   tracking,
+  discovery,
+  ops,
 };
 
 type Namespaces = typeof namespaces;

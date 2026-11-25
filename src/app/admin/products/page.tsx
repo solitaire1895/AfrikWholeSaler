@@ -3,8 +3,8 @@ import { ProductsManager } from "@/components/admin/products-manager";
 
 export default async function AdminProductsPage() {
   const [products, drafts, categories, subCategories] = await Promise.all([
-    getProducts(),
-    getDraftProducts(),
+    getProducts({ localized: false }),
+    getDraftProducts({ localized: false }),
     getCategories(),
     getSubCategories(),
   ]);

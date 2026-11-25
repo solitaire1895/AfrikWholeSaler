@@ -1,5 +1,7 @@
 "use client";
 
+import { NotFoundChat } from "@/components/search/not-found-chat";
+
 import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, SlidersHorizontal, X, Package } from "lucide-react";
@@ -332,16 +334,7 @@ export function ProductsBrowser({
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-20 text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-surface-secondary mb-4">
-                    <Search className="h-8 w-8 text-text-disabled" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-navy mb-1">
-                    {L.emptyTitle}
-                  </h3>
-                  <p className="text-text-secondary text-sm">
-                    {L.emptyText}
-                  </p>
+                <NotFoundChat className="my-12">
                   <button
                     onClick={() => {
                       setSearch("");
@@ -353,7 +346,7 @@ export function ProductsBrowser({
                   >
                     {L.clearFilters}
                   </button>
-                </div>
+                </NotFoundChat>
               )}
             </div>
           </div>
