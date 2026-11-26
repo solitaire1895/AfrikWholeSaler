@@ -1,6 +1,11 @@
+import { pageMetadata } from "@/i18n/page-meta";
 import { Suspense } from "react";
 import { getProductBySlug, getCategories } from "@/lib/queries";
 import { QuoteForm } from "@/components/quote/quote-form";
+
+export async function generateMetadata() {
+  return pageMetadata("quote", "/quote");
+}
 
 export default async function QuotePage({
   searchParams,

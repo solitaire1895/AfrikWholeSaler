@@ -1,6 +1,11 @@
+import { pageMetadata } from "@/i18n/page-meta";
 import { Suspense } from "react";
 import { getProducts, getCategories, getSubCategories, toCard } from "@/lib/queries";
 import { ProductsBrowser } from "@/components/products/products-browser";
+
+export async function generateMetadata() {
+  return pageMetadata("products", "/products", { n: 900 });
+}
 
 export default async function ProductsPage() {
   const [products, categories, subCategories] = await Promise.all([

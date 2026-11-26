@@ -1,8 +1,14 @@
+import { pageMetadata } from "@/i18n/page-meta";
 import { Suspense } from "react";
 import { getCategories } from "@/lib/queries";
 import { SearchResults } from "@/components/search/search-results";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
+
+// Result pages are endless variations: kept out of Google.
+export async function generateMetadata() {
+  return pageMetadata("search", "/search", {}, { index: false });
+}
 
 export default async function SearchPage({
   searchParams,

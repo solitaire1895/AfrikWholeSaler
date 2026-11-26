@@ -1,3 +1,5 @@
+import { pageMetadata } from "@/i18n/page-meta";
+import { getPathname } from "@/i18n/server";
 import Link from "next/link";
 import {
   Package,
@@ -9,6 +11,12 @@ import {
 } from "lucide-react";
 import { getT } from "@/i18n/server";
 import { LanguageSwitcher } from "@/components/layout/language-switcher";
+
+// Log-in and sign-up pages: own titles, kept out of Google.
+export async function generateMetadata() {
+  const path = await getPathname();
+  return pageMetadata(path.startsWith("/register") ? "register" : "login", path, {}, { index: false });
+}
 
 export default async function AuthLayout({
   children,
