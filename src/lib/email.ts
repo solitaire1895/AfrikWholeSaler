@@ -342,3 +342,72 @@ export async function sendStaffOrderConfirmedAlert(
     })
   );
 }
+
+/**
+ * Chat: emails the other side of a conversation when they're away from the
+ * site (no visible tab for 3 minutes). A customer's message goes to the
+ * assigned agent, or to the whole team when nobody is assigned; a staff reply
+ * goes to the customer. Internal notes never email. At most one email per
+ * person and conversation every 10 minutes, so a burst of messages is one email.
+ */
+export async function sendChatMessageEmail(input: {
+  conversationId: string;
+  senderId: string;
+  senderType: "agent" | "customer";
+  content: string;
+  hasAttachments: boolean;
+}) {
+  try {
+    const admin = createAdminClient();
+    const { data: conv } = await admin
+      .from("conversations")
+      .select("user_id, assigned_agent_id, customers(user_id, company_name, contact_name)")
+      .eq("id", input.conversationId)
+      .maybeSingle();
+    if (!conv) return;
+    const cust = (conv.customers ?? null) as { user_id?: string | null; company_name?: string | null; contact_name?: string | null } | null;
+
+    let recipientIds: string[];
+    if (input.senderType === "customer") {
+      if (conv.assigned_agent_id) recipientIds = [conv.assigned_agent_id];
+      else {
+        const { data: staff } = await admin.from("profiles").select("id, is_active").in("role", STAFF_ALERT_ROLES);
+        recipientIds = ((staff ?? []) as { id: string; is_active?: boolean }[]).filter((s) => s.is_active !== false).map((s) => s.id);
+      }
+    } else {
+      recipientIds = [conv.user_id ?? cust?.user_id].filter((x): x is string => Boolean(x));
+    }
+    recipientIds = recipientIds.filter((id) => id !== input.senderId);
+    if (recipientIds.length === 0) return;
+
+    const { offlineUsers } = await import("@/lib/presence");
+    const { rateLimit } = await import("@/lib/rate-limit");
+    const away = await offlineUsers(recipientIds);
+    if (away.size === 0) return;
+    const { data: people } = await admin.from("profiles").select("id, email, locale").in("id", [...away]);
+
+    const customerName = [cust?.contact_name, cust?.company_name].filter(Boolean).join(" · ");
+    const text = input.content.trim();
+    const preview = text.length > 500 ? `${text.slice(0, 500)}…` : text;
+    const toStaff = input.senderType === "customer";
+    const link = `${SITE_URL}${toStaff ? "/admin/messages" : "/dashboard/messages"}?c=${input.conversationId}`;
+
+    await Promise.all(
+      ((people ?? []) as { id: string; email?: string | null; locale?: string | null }[]).map(async (p) => {
+        if (!p.email) return;
+        if (!(await rateLimit(`chatmail:${p.id}:${input.conversationId}`, 1, 600))) return;
+        const locale = isLocale(p.locale) ? p.locale : defaultLocale;
+        const t = emailMessages[locale];
+        const from = toStaff ? customerName || "—" : t.chat.team;
+        const body =
+          heading(t.chat.title, "", format(t.chat.intro, { from })) +
+          `<tr><td style="padding:12px 32px 4px"><div style="background:${C.cream};border-radius:14px;padding:16px 20px;font-size:15px;line-height:1.6;white-space:pre-wrap">${esc(preview)}${
+            input.hasAttachments ? `<div style="color:${C.muted};font-size:13px;margin-top:6px">${esc(t.chat.attachment)}</div>` : ""
+          }</div></td></tr>`;
+        await sendEmail(p.email, format(t.chat.subject, { from }), layout(t, locale, body, { label: t.chat.open, href: link }));
+      })
+    );
+  } catch (err) {
+    Sentry.captureException(err, { tags: { area: "chat-email" } });
+  }
+}

@@ -47,6 +47,14 @@ export const email = defineMessages({
       eta: "Estimated delivery: {date}",
       location: "Location: {location}",
     },
+    chat: {
+      subject: "New message from {from}",
+      title: "You have a new message",
+      intro: "{from} wrote to you on AfrikWholesaler:",
+      attachment: "(attachment)",
+      open: "Reply in the chat",
+      team: "the AfrikWholesaler team",
+    },
     stages: {
       update: "Tracking update",
       sourcing: "Sourcing your products",
@@ -102,6 +110,14 @@ export const email = defineMessages({
       trackingNumber: "Numéro de suivi : {tracking}",
       eta: "Livraison estimée : {date}",
       location: "Lieu : {location}",
+    },
+    chat: {
+      subject: "Nouveau message de {from}",
+      title: "Vous avez un nouveau message",
+      intro: "{from} vous a écrit sur AfrikWholesaler :",
+      attachment: "(pièce jointe)",
+      open: "Répondre dans le chat",
+      team: "l'équipe AfrikWholesaler",
     },
     stages: {
       update: "Mise à jour du suivi",
@@ -159,6 +175,14 @@ export const email = defineMessages({
       eta: "Entrega estimada: {date}",
       location: "Ubicación: {location}",
     },
+    chat: {
+      subject: "Nuevo mensaje de {from}",
+      title: "Tienes un mensaje nuevo",
+      intro: "{from} te escribió en AfrikWholesaler:",
+      attachment: "(archivo adjunto)",
+      open: "Responder en el chat",
+      team: "el equipo de AfrikWholesaler",
+    },
     stages: {
       update: "Actualización de seguimiento",
       sourcing: "Comprando sus productos",
@@ -214,6 +238,14 @@ export const email = defineMessages({
       trackingNumber: "运单号：{tracking}",
       eta: "预计送达：{date}",
       location: "地点：{location}",
+    },
+    chat: {
+      subject: "来自 {from} 的新消息",
+      title: "您有一条新消息",
+      intro: "{from} 在 AfrikWholesaler 上给您发了消息：",
+      attachment: "（附件）",
+      open: "在聊天中回复",
+      team: "AfrikWholesaler 团队",
     },
     stages: {
       update: "物流更新",

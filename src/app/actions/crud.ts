@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { sendChatMessageEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/rate-limit";
 import { detectImage, detectVideo } from "@/lib/file-signature";
 import { slugify } from "@/lib/slug";
@@ -202,6 +204,19 @@ export async function sendMessage(input: {
     .from("conversations")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", input.conversationId);
+
+  // Email whoever is away from the site, after the reply has been sent back.
+  if (!input.isInternalNote) {
+    after(() =>
+      sendChatMessageEmail({
+        conversationId: input.conversationId,
+        senderId: user.id,
+        senderType,
+        content: input.content,
+        hasAttachments: (input.attachments?.length ?? 0) > 0,
+      })
+    );
+  }
 
   revalidatePath("/dashboard/messages");
   revalidatePath("/admin/messages");

@@ -160,6 +160,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Tells the server this user is on the site (chat emails go only to
+  // people who are away). Pings while the tab is visible.
+  useEffect(() => {
+    if (!userId) return;
+    const ping = () => {
+      if (document.visibilityState === "visible") fetch("/api/presence", { method: "POST" }).catch(() => {});
+    };
+    ping();
+    const timer = setInterval(ping, 60_000);
+    document.addEventListener("visibilitychange", ping);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", ping);
+    };
+  }, [userId]);
+
   // Staff show as "online" to customers while the site is open.
   useEffect(() => {
     if (!userId || !isStaff) return;
